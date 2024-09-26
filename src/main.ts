@@ -3,8 +3,13 @@ import { AppModule } from './app.module';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { json } from 'express';
+import {
+  UnprocessableEntityException,
+  ValidationError,
+  ValidationPipe,
+} from '@nestjs/common';
 
-export const PORT = process.env.PORT || 3000;
+export const SERVER_PORT = process.env.SERVER_PORT || 8000;
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -23,7 +28,46 @@ async function bootstrap() {
   // Body parser limit
   app.use(json({ limit: '10kb' }));
 
-  await app.listen(PORT);
+  // Validate incoming requests. This will apply to all routes
+  // Remove the whitelist option to allow all properties to be passed through
+  // Remove the transform option to disable automatic type conversion
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      exceptionFactory: (validationErrors: ValidationError[] = []) => {
+        const errors = [];
+
+        const getValidationErrorsRecursively = (
+          validationErrors: ValidationError[],
+          parentProperty = '',
+        ) => {
+          validationErrors.forEach((error) => {
+            const propertyPath = parentProperty
+              ? [parentProperty, error.property].join('.')
+              : error.property;
+
+            if (error.constraints)
+              errors.push({
+                property: propertyPath,
+                errors: Object.values(error.constraints),
+              });
+
+            if (error.children?.length)
+              getValidationErrorsRecursively(error.children, propertyPath);
+          });
+        };
+        getValidationErrorsRecursively(validationErrors);
+
+        return new UnprocessableEntityException({
+          message: 'Validation Error',
+          errors: errors,
+        });
+      },
+    }),
+  );
+
+  await app.listen(SERVER_PORT);
 }
 
 bootstrap();
