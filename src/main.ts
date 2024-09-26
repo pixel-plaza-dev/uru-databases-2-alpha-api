@@ -8,6 +8,7 @@ import {
   ValidationError,
   ValidationPipe,
 } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 export const SERVER_PORT = process.env.SERVER_PORT || 8000;
 
@@ -66,6 +67,16 @@ async function bootstrap() {
       },
     }),
   );
+
+  // Swagger API documentation
+  const config = new DocumentBuilder()
+    .setTitle('Alpha API')
+    .setDescription('The Alpha API description')
+    .setVersion('0.1')
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, document);
 
   await app.listen(SERVER_PORT);
 }
