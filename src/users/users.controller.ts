@@ -1,13 +1,24 @@
-import { Body, Controller, Delete, Patch, Post } from '@nestjs/common';
-import { SignupUserDto } from './dto/user-signup.dto';
+import {
+  Body,
+  Controller,
+  Delete,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
-import { UserLoginDto } from './dto/user-login.dto';
-import { UserUpdateDto } from './dto/user-update.dto';
-import { UserChangePasswordDto } from './dto/user-change-password.dto';
-import { UserChangeEmailDto } from './dto/user-change-email.dto';
-import { UserForgotPasswordDto } from './dto/user-forgot-password.dto';
-import { UserDeleteDto } from './dto/user-delete';
+import { UserUpdateDto } from '../dto/user/user-update.dto';
+import { UserChangePasswordDto } from '../dto/user/user-change-password.dto';
+import { UserChangeEmailDto } from '../dto/user/user-change-email.dto';
+import { UserForgotPasswordDto } from '../dto/user/user-forgot-password.dto';
+import { UserDeleteDto } from '../dto/user/user-delete';
+import { UserChangeRoleDto } from '../dto/user/user-change-role.dto';
+import { AuthGuard } from '../auth/auth.guard';
+import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
+import { Request } from 'express';
 
+@UseGuards(AuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(private usersService: UsersService) {}
@@ -15,16 +26,6 @@ export class UsersController {
   @Patch()
   async update(@Body() user: UserUpdateDto) {
     return this.usersService.update(user);
-  }
-
-  @Post('signup')
-  async signup(@Body() user: SignupUserDto) {
-    return this.usersService.signup(user);
-  }
-
-  @Post('login')
-  async login(@Body() user: UserLoginDto) {
-    return this.usersService.login(user);
   }
 
   @Patch('change-password')
@@ -47,8 +48,21 @@ export class UsersController {
     return this.usersService.logout();
   }
 
+  @Post('close-all-sessions')
+  async closeAllSessions(
+    @Req() req: Request,
+    @Body() user: UserCloseAllSessionsDto,
+  ) {
+    return this.usersService.closeAllSessions(req, user);
+  }
+
   @Delete()
   async delete(@Body() user: UserDeleteDto) {
     return this.usersService.delete(user);
+  }
+
+  @Post('change-role')
+  async setAdmin(@Body() user: UserChangeRoleDto) {
+    return this.usersService.changeRole(user);
   }
 }

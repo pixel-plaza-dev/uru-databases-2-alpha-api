@@ -9,8 +9,9 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as cookieParser from 'cookie-parser';
 
-export const SERVER_PORT = process.env.SERVER_PORT || 8000;
+const SERVER_PORT = process.env.SERVER_PORT || 8000;
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -28,6 +29,9 @@ async function bootstrap() {
 
   // Body parser limit
   app.use(json({ limit: '10kb' }));
+
+  // Cookie parser
+  app.use(cookieParser());
 
   // Validate incoming requests. This will apply to all routes
   // Remove the whitelist option to allow all properties to be passed through
@@ -76,7 +80,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  SwaggerModule.setup('docs', app, document);
 
   await app.listen(SERVER_PORT);
 }

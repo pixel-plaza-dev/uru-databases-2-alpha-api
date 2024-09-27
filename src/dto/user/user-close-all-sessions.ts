@@ -1,7 +1,6 @@
 import { PickType } from '@nestjs/swagger';
 import { UserDto } from './user.dto';
 
-export class UserLoginDto extends PickType(UserDto, [
-  'email',
+export class UserCloseAllSessionsDto extends PickType(UserDto, [
   'password',
 ] as const) {}
