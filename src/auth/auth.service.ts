@@ -51,6 +51,12 @@ export class AuthService {
       throw new BadRequestException('User email already registered');
     }
 
+    // Compare passwords
+    if (user.password !== user.confirmPassword) {
+      this.logger.warn('Passwords do not match: ' + user.email);
+      throw new BadRequestException('Passwords do not match`  ');
+    }
+
     // Hash password
     bcrypt.hash(
       user.password,
