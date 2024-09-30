@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, TokenType } from '@prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
@@ -10,13 +10,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   async createUser({
     email,
     password,
-    name,
+    firstName,
+    lastName,
     address,
     phone,
   }: {
     email: string;
     password: string;
-    name: string;
+    firstName: string;
+    lastName: string;
     address?: string;
     phone?: string;
   }) {
@@ -24,7 +26,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       data: {
         email,
         password,
-        name,
+        firstName,
+        lastName,
         address: address ?? Prisma.skip,
         phone: phone ?? Prisma.skip,
       },
@@ -55,10 +58,21 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async createUserToken(email: string, token: string) {
+  async findUserToken(token: string, tokenType: TokenType) {
+    return this.token.findUnique({
+      where: { token, tokenType },
+    });
+  }
+
+  async createUserToken(
+    email: string,
+    token: string,
+    expiresAt: Date,
+    tokenType: TokenType,
+  ) {
     return this.user.update({
       where: { email },
-      data: { tokens: { create: { token } } },
+      data: { tokens: { create: { token, expiresAt, tokenType } } },
     });
   }
 
@@ -68,7 +82,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async updateToken(id: string) {
+  async updateLastUsedAtToken(id: string) {
     return this.token.update({
       where: { id },
       data: { lastUsedAt: new Date() },

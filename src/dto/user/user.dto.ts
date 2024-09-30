@@ -9,11 +9,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-
-export enum UserRole {
-  USER = 'USER',
-  ADMIN = 'ADMIN',
-}
+import { UserRole } from '@prisma/client';
 
 export class UserDto {
   @IsString()
@@ -43,7 +39,12 @@ export class UserDto {
   @IsString()
   @IsNotEmpty()
   @ApiProperty()
-  readonly name: string;
+  readonly firstName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @ApiProperty()
+  readonly lastName: string;
 
   @IsOptional()
   @IsString()

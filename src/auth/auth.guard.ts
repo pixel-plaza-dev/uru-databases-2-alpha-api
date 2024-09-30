@@ -5,58 +5,56 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
-
-const JWT_SECRET = process.env.JWT_SECRET;
+import {
+  AuthService,
+  INVALID_TOKEN,
+  TOKEN_EXPIRED,
+  TOKEN_NOT_FOUND,
+} from './auth.service';
+import { TokenType } from '@prisma/client';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
   private readonly logger = new Logger(AuthGuard.name);
 
   constructor(
-    private jwtService: JwtService,
     private prismaService: PrismaService,
+    private authService: AuthService,
   ) {}
 
-  failedToAuthenticate(message: string) {
-    this.logger.error('Failed to authenticate: ' + message);
-    throw new UnauthorizedException();
-  }
-
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
-    const token = this.extractTokenFromHeader(request);
-    let payload: any;
+    // Extract request
+    const req = context.switchToHttp().getRequest();
 
-    if (!token) this.failedToAuthenticate('No token provided');
+    // Get access token
+    const accessToken = this.authService.extractAccessTokenFromCookies(req);
 
-    try {
-      payload = await this.jwtService.verifyAsync(token, {
-        secret: JWT_SECRET,
-      });
-    } catch {
-      this.failedToAuthenticate('Invalid token');
-    }
-    // Check if token exists
-    const tokenFound = await this.prismaService.token.findUnique({
-      where: { token: token },
-    });
-    if (!tokenFound) this.failedToAuthenticate('Token not found');
+    // Check if access token was found
+    if (!accessToken) this.authService.failedToAuthenticate(TOKEN_NOT_FOUND);
 
-    // Check if token date is expired
-    //if (tokenExists.createdAt<payload.) throw new UnauthorizedException();
+    // Verify access token
+    const payload = await this.authService.verifyToken(accessToken);
+    if (payload === null) throw new UnauthorizedException(TOKEN_EXPIRED);
 
-    // Update token last used date
-    await this.prismaService.updateToken(tokenFound.id);
+    const email = payload.data.email;
 
-    request['user'] = payload;
-    this.logger.log('User authenticated: ' + payload.email);
+    // Check if access token exists
+    const tokenFound = await this.prismaService.findUserToken(
+      accessToken,
+      TokenType.ACCESS,
+    );
+    if (!tokenFound)
+      this.authService.failedToAuthenticate(
+        INVALID_TOKEN,
+        'Token not found at database',
+      );
+
+    // Update access token last used at date
+    await this.prismaService.updateLastUsedAtToken(tokenFound.id);
+
+    req['user'] = payload;
+    this.logger.log('User authenticated: ' + email);
     return true;
-  }
-
-  private extractTokenFromHeader(req: Request): string | undefined {
-    return req.cookies.access_token;
   }
 }

@@ -11,6 +11,8 @@ import {
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
 
+// Constants
+export const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const SERVER_PORT = process.env.SERVER_PORT || 8000;
 
 async function bootstrap() {

@@ -3,5 +3,11 @@ import { UserDto } from '../user.dto';
 
 export class UserAuthSignupDto extends IntersectionType(
   PartialType(PickType(UserDto, ['address', 'phone'] as const)),
-  PickType(UserDto, ['email', 'password', 'confirmPassword', 'name'] as const),
+  PickType(UserDto, [
+    'email',
+    'password',
+    'confirmPassword',
+    'firstName',
+    'lastName',
+  ] as const),
 ) {}
