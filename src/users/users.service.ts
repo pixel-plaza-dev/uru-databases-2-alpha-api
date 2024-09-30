@@ -1,9 +1,4 @@
-import {
-  HttpStatus,
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserUpdateDto } from '../dto/user/user-update.dto';
 import { UserChangeEmailDto } from '../dto/user/user-change-email.dto';
@@ -14,10 +9,23 @@ import { UserChangeRoleDto } from '../dto/user/user-change-role.dto';
 import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
 import { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
+import { REFRESH_TOKEN } from '../global/config';
+import {
+  USER_CHANGE_ROLE,
+  USER_CHANGED_EMAIL,
+  USER_CHANGED_PASSWORD,
+  USER_DELETED,
+  USER_FORGOT_PASSWORD,
+  USER_LOGOUT,
+  USER_SESSIONS_CLOSED,
+  USER_UPDATED,
+} from '../global/messages';
+import { LoggerService } from '../logger/logger.service';
+import { USER_WRONG_CREDENTIALS } from '../global/errors';
 
 @Injectable()
 export class UsersService {
-  private readonly logger = new Logger(UsersService.name);
+  private readonly logger = new LoggerService(UsersService.name);
 
   constructor(
     private prismaService: PrismaService,
@@ -25,33 +33,54 @@ export class UsersService {
   ) {}
 
   async update(user: UserUpdateDto) {
-    this.logger.log('User update: ' + user.email);
-    return user;
+    return this.logger.onUserSuccess(
+      USER_UPDATED,
+      user.email,
+      HttpStatus.CREATED,
+    );
   }
 
   async changePassword(user: UserChangePasswordDto) {
-    this.logger.log('User change password: ' + user.email);
-    return user;
+    return this.logger.onUserSuccess(
+      USER_CHANGED_PASSWORD,
+      user.email,
+      HttpStatus.CREATED,
+    );
   }
 
   async changeEmail(user: UserChangeEmailDto) {
-    this.logger.log('User change email: ' + user.email);
-    return user;
+    return this.logger.onUserSuccess(
+      USER_CHANGED_EMAIL,
+      user.email,
+      HttpStatus.CREATED,
+    );
   }
 
   async forgotPassword(user: UserForgotPasswordDto) {
-    this.logger.log('User forgot password: ' + user.email);
-    return user;
+    return this.logger.onUserSuccess(
+      USER_FORGOT_PASSWORD,
+      user.email,
+      HttpStatus.CREATED,
+    );
   }
 
-  async logout() {
-    this.logger.log('User logout');
-    return 'User logout';
+  async logout(req: Request) {
+    const { email } = req['user'];
+
+    // Extract refresh token from request
+    const refreshToken = this.authService.extractTokenFromCookies(
+      req,
+      REFRESH_TOKEN,
+    );
+
+    // Invalidate refresh token
+    await this.prismaService.invalidateRefreshToken(refreshToken);
+
+    return this.logger.onUserSuccess(USER_LOGOUT, email);
   }
 
   async closeAllSessions(req: Request, user: UserCloseAllSessionsDto) {
-    const email = req['user'].email;
-    this.logger.log('User logout all: ' + email);
+    const { email } = req['user'];
 
     // Verify password
     const userFound = await this.prismaService.findUser(email, {
@@ -63,28 +92,19 @@ export class UsersService {
       userFound.password,
     );
 
-    if (!match) {
-      this.logger.warn('Invalid password: ' + email);
-      throw new UnauthorizedException();
-    }
+    if (!match) this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
 
-    // Delete all tokens
-    //await this.prismaService.deleteUserTokens(userFound.id);
+    // Invalidate all refresh and access tokens
+    await this.prismaService.invalidateRefreshTokens(userFound.id);
 
-    this.logger.log('All sessions closed: ' + email);
-    return {
-      statusCode: HttpStatus.OK,
-      message: 'All sessions closed',
-    };
+    return this.logger.onUserSuccess(USER_SESSIONS_CLOSED, email);
   }
 
   async delete(user: UserDeleteDto) {
-    this.logger.log('User delete: ' + user.email);
-    return user;
+    this.logger.onUserSuccess(USER_DELETED, user.email);
   }
 
   async changeRole(user: UserChangeRoleDto) {
-    this.logger.log('User change role: ' + user.email);
-    return user;
+    this.logger.onUserSuccess(USER_CHANGE_ROLE, user.email);
   }
 }

@@ -44,8 +44,8 @@ export class UsersController {
   }
 
   @Post('logout')
-  async logout() {
-    return this.usersService.logout();
+  async logout(@Req() req: Request) {
+    return this.usersService.logout(req);
   }
 
   @Post('close-all-sessions')

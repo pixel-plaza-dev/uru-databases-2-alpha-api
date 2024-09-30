@@ -7,6 +7,8 @@ import { UsersModule } from './users/users.module';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from './prisma/prisma.module';
+import { LoggerModule } from './logger/logger.module';
+import { LoggerService } from './logger/logger.service';
 
 @Module({
   imports: [
@@ -25,6 +27,7 @@ import { PrismaModule } from './prisma/prisma.module';
         limit: 100,
       },
     ]),
+    LoggerModule,
   ],
   controllers: [AppController],
   providers: [
@@ -33,6 +36,7 @@ import { PrismaModule } from './prisma/prisma.module';
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
+    LoggerService,
   ],
 })
 export class AppModule {}
