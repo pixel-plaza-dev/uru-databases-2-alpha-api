@@ -69,7 +69,7 @@ export class UsersService {
     }
 
     // Delete all tokens
-    await this.prismaService.deleteUserTokens(userFound.id);
+    //await this.prismaService.deleteUserTokens(userFound.id);
 
     this.logger.log('All sessions closed: ' + email);
     return {

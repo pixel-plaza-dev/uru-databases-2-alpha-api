@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { Prisma, PrismaClient, TokenType } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
@@ -22,7 +22,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     address?: string;
     phone?: string;
   }) {
-    return this.user.create({
+    await this.user.create({
       data: {
         email,
         password,
@@ -58,34 +58,65 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async findUserToken(token: string, tokenType: TokenType) {
-    return this.token.findUnique({
-      where: { token, tokenType },
+  async findRefreshToken(token: string) {
+    return this.refreshToken.findUnique({
+      where: { token },
     });
   }
 
-  async createUserToken(
-    email: string,
+  async findAccessToken(token: string) {
+    return this.accessToken.findUnique({
+      where: { token },
+    });
+  }
+
+  async createRefreshToken(email: string, token: string, expiresAt: Date) {
+    await this.user.update({
+      where: { email },
+      data: { refreshTokens: { create: { token, expiresAt } } },
+    });
+  }
+
+  async createAccessToken(
     token: string,
     expiresAt: Date,
-    tokenType: TokenType,
+    refreshToken: string,
   ) {
-    return this.user.update({
-      where: { email },
-      data: { tokens: { create: { token, expiresAt, tokenType } } },
+    await this.refreshToken.update({
+      where: { token: refreshToken },
+      data: {
+        accessToken: {
+          create: {
+            token,
+            expiresAt,
+          },
+        },
+      },
     });
   }
 
-  async deleteUserTokens(userId: string) {
-    return this.token.deleteMany({
-      where: { userId },
-    });
-  }
-
-  async updateLastUsedAtToken(id: string) {
-    return this.token.update({
+  async updateAccessTokenLastUsage(id: string) {
+    await this.accessToken.update({
       where: { id },
       data: { lastUsedAt: new Date() },
     });
+  }
+
+  async invalidateAccessToken(token: string) {
+    await this.accessToken.update({
+      where: { token },
+      data: { valid: false },
+    });
+  }
+
+  async invalidateRefreshToken(token: string) {
+      await this.refreshToken.updateMany({
+        where: { token },
+        data: { valid: false },
+      })
+      await this.accessToken.updateMany({
+        where: { refreshToken: { token } },
+        data: { valid: false },
+      });
   }
 }
