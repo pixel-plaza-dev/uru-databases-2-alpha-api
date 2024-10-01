@@ -188,7 +188,7 @@ export class AuthService {
 
     // Verify user password
     const userFound = await this.verifyUserPassword(username, password, {
-      deleted: true,
+      deleted: true, role: true,
     });
 
     // Check if user exists and is not deleted

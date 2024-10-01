@@ -32,6 +32,14 @@ export class LoggerService extends Logger {
     throw new InternalServerErrorException(INTERNAL_SERVER_ERROR);
   }
 
+  onPingSuccess(message: string) {
+    super.log(message);
+    return {
+      statusCode: HttpStatus.OK,
+      message,
+    };
+  }
+
   onUserSuccess(
     message: string,
     username: string,

@@ -1,3 +1,6 @@
+// Ping pong messages
+export const PONG = 'pong' as const;
+
 // User messages
 export const USER_SIGNUP = 'User signed up' as const;
 export const USER_LOGIN = 'User logged in' as const;
