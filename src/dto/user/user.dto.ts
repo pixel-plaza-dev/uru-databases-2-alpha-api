@@ -1,4 +1,5 @@
 import {
+  IsAlphanumeric,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -21,6 +22,12 @@ export class UserDto {
   @IsNotEmpty()
   @ApiProperty()
   readonly email: string;
+
+  @IsAlphanumeric()
+  @IsNotEmpty()
+  @ApiProperty()
+  @MaxLength(64)
+  readonly username: string;
 
   @IsString()
   @IsNotEmpty()

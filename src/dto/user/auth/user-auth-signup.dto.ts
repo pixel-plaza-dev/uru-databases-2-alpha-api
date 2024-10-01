@@ -5,6 +5,7 @@ export class UserAuthSignupDto extends IntersectionType(
   PartialType(PickType(UserDto, ['address', 'phone'] as const)),
   PickType(UserDto, [
     'email',
+    'username',
     'password',
     'confirmPassword',
     'firstName',

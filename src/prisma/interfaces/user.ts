@@ -1,5 +1,6 @@
 export interface UserCreate {
   email: string;
+  username: string;
   password: string;
   firstName: string;
   lastName: string;
@@ -9,9 +10,12 @@ export interface UserCreate {
 
 export interface UserSelectable {
   id?: boolean;
+  email?: boolean;
+  username?: boolean;
   password?: boolean;
-  name?: boolean;
+  firstName?: boolean;
+  lastName?: boolean;
   address?: boolean;
   phone?: boolean;
-  email?: true;
+  deleted?: boolean;
 }

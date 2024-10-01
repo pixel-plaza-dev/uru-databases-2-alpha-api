@@ -14,7 +14,7 @@ import { UserChangeEmailDto } from '../dto/user/user-change-email.dto';
 import { UserForgotPasswordDto } from '../dto/user/user-forgot-password.dto';
 import { UserDeleteDto } from '../dto/user/user-delete';
 import { UserChangeRoleDto } from '../dto/user/user-change-role.dto';
-import { AuthGuard } from '../auth/auth.guard';
+import { AuthGuard, Public } from '../auth/auth.guard';
 import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
 import { Request } from 'express';
 
@@ -24,20 +24,24 @@ export class UsersController {
   constructor(private usersService: UsersService) {}
 
   @Patch()
-  async update(@Body() user: UserUpdateDto) {
-    return this.usersService.update(user);
+  async update(@Req() req: Request, @Body() user: UserUpdateDto) {
+    return this.usersService.update(req, user);
   }
 
   @Patch('change-password')
-  async changePassword(@Body() user: UserChangePasswordDto) {
-    return this.usersService.changePassword(user);
+  async changePassword(
+    @Req() req: Request,
+    @Body() user: UserChangePasswordDto,
+  ) {
+    return this.usersService.changePassword(req, user);
   }
 
   @Patch('change-email')
-  async changeEmail(@Body() user: UserChangeEmailDto) {
-    return this.usersService.changeEmail(user);
+  async changeEmail(@Req() req: Request, @Body() user: UserChangeEmailDto) {
+    return this.usersService.changeEmail(req, user);
   }
 
+  @Public()
   @Post('forgot-password')
   async forgotPassword(@Body() user: UserForgotPasswordDto) {
     return this.usersService.forgotPassword(user);
@@ -57,12 +61,12 @@ export class UsersController {
   }
 
   @Delete()
-  async delete(@Body() user: UserDeleteDto) {
-    return this.usersService.delete(user);
+  async delete(@Req() req: Request, @Body() user: UserDeleteDto) {
+    return this.usersService.delete(req, user);
   }
 
   @Post('change-role')
-  async setAdmin(@Body() user: UserChangeRoleDto) {
-    return this.usersService.changeRole(user);
+  async setAdmin(@Req() req: Request, @Body() user: UserChangeRoleDto) {
+    return this.usersService.changeRole(req, user);
   }
 }

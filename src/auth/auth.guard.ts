@@ -1,13 +1,24 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  SetMetadata,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
-import { ACCESS_TOKEN } from '../global/config';
+import { ACCESS_TOKEN, IS_PUBLIC_KEY, REQUEST_USER } from '../global/config';
 import {
   INVALID_TOKEN,
   TOKEN_EXPIRED,
+  TOKEN_INVALIDATED,
   TOKEN_NOT_FOUND,
+  TOKEN_NOT_FOUND_DB,
 } from '../global/errors';
 import { LoggerService } from '../logger/logger.service';
+import { Reflector } from '@nestjs/core';
+
+// Public decorator
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -16,9 +27,17 @@ export class AuthGuard implements CanActivate {
   constructor(
     private prismaService: PrismaService,
     private authService: AuthService,
+    private reflector: Reflector,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Check if route is public
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic) return true;
+
     // Extract request
     const req = context.switchToHttp().getRequest();
 
@@ -37,27 +56,29 @@ export class AuthGuard implements CanActivate {
       await this.prismaService.invalidateAccessToken(accessToken);
       this.logger.onUnauthorized(TOKEN_EXPIRED);
     }
-
-    const email = payload.data.email;
-
     // Check if access token exists
+
     const tokenFound = await this.prismaService.findAccessToken(accessToken, {
       id: true,
       valid: true,
     });
-    if (!tokenFound)
-      this.logger.onUnauthorized(INVALID_TOKEN, 'Token not found at database');
 
-    // Check if access token is valid
-    if (!tokenFound.valid)
-      this.logger.onUnauthorized(INVALID_TOKEN, 'Token is not valid');
+    // Check if access token was found in database and is valid
+    if (!tokenFound || !tokenFound.valid)
+      this.logger.onUnauthorized(
+        INVALID_TOKEN,
+        tokenFound ? TOKEN_INVALIDATED : TOKEN_NOT_FOUND_DB,
+      );
 
     // Update access token last used at date
     await this.prismaService.updateAccessTokenLastUsage(tokenFound.id);
 
     // Set payload to request object
-    req['user'] = { ...payload.data };
+    req[REQUEST_USER] = { ...payload.data };
 
-    return this.logger.onAuthorized(email);
+    // Get username from payload
+    const username = this.authService.getUsernameFromPayload(payload);
+
+    return this.logger.onAuthorized(username);
   }
 }

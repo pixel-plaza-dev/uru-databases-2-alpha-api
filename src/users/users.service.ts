@@ -9,7 +9,7 @@ import { UserChangeRoleDto } from '../dto/user/user-change-role.dto';
 import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
 import { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
-import { REFRESH_TOKEN } from '../global/config';
+import { REFRESH_TOKEN, REQUEST_USER } from '../global/config';
 import {
   USER_CHANGE_ROLE,
   USER_CHANGED_EMAIL,
@@ -32,26 +32,41 @@ export class UsersService {
     private authService: AuthService,
   ) {}
 
-  async update(user: UserUpdateDto) {
+  getRequestUser(req: Request) {
+    return req[REQUEST_USER];
+  }
+
+  getUsernameFromRequest(req: Request): string {
+    const data = this.getRequestUser(req);
+    return this.authService.getUsernameFromData(data);
+  }
+
+  async update(req: Request, user: UserUpdateDto) {
+    const username = this.getUsernameFromRequest(req);
+
     return this.logger.onUserSuccess(
       USER_UPDATED,
-      user.email,
+      username,
       HttpStatus.CREATED,
     );
   }
 
-  async changePassword(user: UserChangePasswordDto) {
+  async changePassword(req: Request, user: UserChangePasswordDto) {
+    const username = this.getUsernameFromRequest(req);
+
     return this.logger.onUserSuccess(
       USER_CHANGED_PASSWORD,
-      user.email,
+      username,
       HttpStatus.CREATED,
     );
   }
 
-  async changeEmail(user: UserChangeEmailDto) {
+  async changeEmail(req: Request, user: UserChangeEmailDto) {
+    const username = this.getUsernameFromRequest(req);
+
     return this.logger.onUserSuccess(
       USER_CHANGED_EMAIL,
-      user.email,
+      username,
       HttpStatus.CREATED,
     );
   }
@@ -59,13 +74,13 @@ export class UsersService {
   async forgotPassword(user: UserForgotPasswordDto) {
     return this.logger.onUserSuccess(
       USER_FORGOT_PASSWORD,
-      user.email,
+      user.username,
       HttpStatus.CREATED,
     );
   }
 
   async logout(req: Request) {
-    const { email } = req['user'];
+    const username = this.getUsernameFromRequest(req);
 
     // Extract refresh token from request
     const refreshToken = this.authService.extractTokenFromCookies(
@@ -76,35 +91,48 @@ export class UsersService {
     // Invalidate refresh token
     await this.prismaService.invalidateRefreshToken(refreshToken);
 
-    return this.logger.onUserSuccess(USER_LOGOUT, email);
+    return this.logger.onUserSuccess(USER_LOGOUT, username);
   }
 
   async closeAllSessions(req: Request, user: UserCloseAllSessionsDto) {
-    const { email } = req['user'];
+    const { password } = user;
+    const username = this.getUsernameFromRequest(req);
 
-    // Verify password
-    const userFound = await this.prismaService.findUser(email, {
-      password: true,
-      id: true,
-    });
-    const match = await this.authService.verifyPassword(
-      user.password,
-      userFound.password,
-    );
-
-    if (!match) this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
+    // Verify user password
+    await this.authService.verifyUserPassword(username, password);
 
     // Invalidate all refresh and access tokens
-    await this.prismaService.invalidateRefreshTokens(userFound.id);
+    await this.prismaService.invalidateRefreshTokens(username);
 
-    return this.logger.onUserSuccess(USER_SESSIONS_CLOSED, email);
+    return this.logger.onUserSuccess(USER_SESSIONS_CLOSED, username);
   }
 
-  async delete(user: UserDeleteDto) {
-    this.logger.onUserSuccess(USER_DELETED, user.email);
+  async delete(req: Request, user: UserDeleteDto) {
+    const username = this.getUsernameFromRequest(req);
+
+    // Compare provided username with token username
+    if (username !== user.username)
+      this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
+
+    // Verify user password
+    await this.authService.verifyUserPassword(username, user.password);
+
+    await (() => {
+      // Invalidate all refresh and access tokens
+      const p1 = this.prismaService.invalidateRefreshTokens(username);
+
+      // Delete user
+      const p2 = this.prismaService.deleteUser(username);
+
+      return Promise.all([p1, p2]);
+    })();
+
+    this.logger.onUserSuccess(USER_DELETED, username);
   }
 
-  async changeRole(user: UserChangeRoleDto) {
-    this.logger.onUserSuccess(USER_CHANGE_ROLE, user.email);
+  async changeRole(req: Request, user: UserChangeRoleDto) {
+    const username = this.getUsernameFromRequest(req);
+
+    this.logger.onUserSuccess(USER_CHANGE_ROLE, username);
   }
 }

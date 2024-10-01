@@ -22,12 +22,15 @@ import {
   INVALID_TOKEN,
   JWT_TOKEN_EXPIRED_ERROR,
   TOKEN_EXPIRED,
+  TOKEN_INVALIDATED,
   TOKEN_NOT_FOUND,
+  TOKEN_NOT_FOUND_DB,
   USER_PASSWORDS_DO_NOT_MATCH,
   USER_REGISTERED,
   USER_WRONG_CREDENTIALS,
 } from '../global/errors';
 import { LoggerService } from '../logger/logger.service';
+import { UserSelectable } from '../prisma/interfaces/user';
 
 @Injectable()
 export class AuthService {
@@ -38,8 +41,29 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  async verifyPassword(password: string, hash: string) {
+  async comparePasswords(password: string, hash: string): Promise<boolean> {
     return await bcrypt.compare(password, hash);
+  }
+
+  async verifyUserPassword(
+    username: string,
+    password: string,
+    select?: UserSelectable,
+  ) {
+    // Get user password
+    const userFound = await this.prismaService.findUser(username, {
+      ...select,
+      password: true,
+    });
+
+    // Compare passwords
+    const match = !userFound
+      ? false
+      : await this.comparePasswords(password, userFound.password);
+
+    if (!match) this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
+
+    return userFound;
   }
 
   async signToken(data: object, expiresIn: Date) {
@@ -49,7 +73,7 @@ export class AuthService {
     });
   }
 
-  getTokenExpiration(tokenType: AuthTokenConfig) {
+  getTokenExpiration(tokenType: AuthTokenConfig): Date {
     return new Date(Date.now() + tokenType.expiresIn);
   }
 
@@ -58,7 +82,7 @@ export class AuthService {
     token: string,
     tokenType: AuthTokenConfig,
     expires: Date,
-  ) {
+  ): void {
     const { httpOnly, secure, sameSite } = tokenType.options;
     res.cookie(tokenType.name, token, {
       httpOnly,
@@ -70,19 +94,19 @@ export class AuthService {
 
   async generateToken(
     res: Response,
-    email: string,
+    username: string,
     config: AuthTokenConfig,
     refreshToken?: string,
-  ) {
+  ): Promise<string> {
     // Generate token
     const tokenExpiresAt = this.getTokenExpiration(config);
-    const payload = refreshToken ? { email, refreshToken } : { email };
+    const payload = refreshToken ? { username, refreshToken } : { username };
     const token = await this.signToken(payload, tokenExpiresAt);
 
     // Add token to user
     if (!refreshToken)
       await this.prismaService.createRefreshToken({
-        email,
+        username,
         token,
         expiresAt: tokenExpiresAt,
       });
@@ -99,10 +123,10 @@ export class AuthService {
     return token;
   }
 
-  async generateTokens(res: Response, email: string) {
+  async generateTokens(res: Response, username: string): Promise<void> {
     // Generate refresh and access token
-    const refreshToken = await this.generateToken(res, email, REFRESH_TOKEN);
-    await this.generateToken(res, email, ACCESS_TOKEN, refreshToken);
+    const refreshToken = await this.generateToken(res, username, REFRESH_TOKEN);
+    await this.generateToken(res, username, ACCESS_TOKEN, refreshToken);
   }
 
   extractTokenFromCookies(
@@ -110,6 +134,14 @@ export class AuthService {
     config: AuthTokenConfig,
   ): string | undefined {
     return req.cookies[config.name];
+  }
+
+  getUsernameFromPayload(payload: any) {
+    return payload.data.username;
+  }
+
+  getUsernameFromData(data: any) {
+    return data.username;
   }
 
   async verifyToken(token: string) {
@@ -126,13 +158,15 @@ export class AuthService {
   }
 
   async signup(user: UserAuthSignupDto) {
+    const { username, password, confirmPassword } = user;
+
     // Check if user exists
-    const userExists = await this.prismaService.findUser(user.email);
-    if (userExists) this.logger.onUserBadRequest(USER_REGISTERED, user.email);
+    const userExists = await this.prismaService.findUser(username);
+    if (userExists) this.logger.onUserBadRequest(USER_REGISTERED, username);
 
     // Compare passwords
-    if (user.password !== user.confirmPassword)
-      this.logger.onUserBadRequest(USER_PASSWORDS_DO_NOT_MATCH, user.email);
+    if (password !== confirmPassword)
+      this.logger.onUserBadRequest(USER_PASSWORDS_DO_NOT_MATCH, username);
 
     // Hash password
     bcrypt.hash(
@@ -146,24 +180,25 @@ export class AuthService {
       },
     );
 
-    return this.logger.onUserSuccess(USER_SIGNUP, user.email);
+    return this.logger.onUserSuccess(USER_SIGNUP, username);
   }
 
   async login(res: Response, user: UserAuthLoginDto) {
-    const userFound = await this.prismaService.findUser(user.email, {
-      password: true,
+    const { username, password } = user;
+
+    // Verify user password
+    const userFound = await this.verifyUserPassword(username, password, {
+      deleted: true,
     });
 
-    const match = userFound
-      ? await this.verifyPassword(user.password, userFound.password)
-      : false;
-
-    if (!match) this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
+    // Check if user exists and is not deleted
+    if (!userFound || userFound.deleted)
+      this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
 
     // Generate tokens
-    await this.generateTokens(res, user.email);
+    await this.generateTokens(res, username);
 
-    return this.logger.onUserSuccess(USER_LOGIN, user.email);
+    return this.logger.onUserSuccess(USER_LOGIN, username);
   }
 
   async refresh(req: Request, res: Response) {
@@ -178,19 +213,26 @@ export class AuthService {
       this.logger.onUnauthorized(TOKEN_EXPIRED);
     }
 
-    const email = payload.data.email;
+    const username = this.getUsernameFromPayload(payload);
 
-    // Check if refresh token exists
+    // Check if refresh token was found in database and is valid
     const tokenFound = await this.prismaService.findRefreshToken(refreshToken);
-    if (!tokenFound || tokenFound.valid)
-      this.logger.onUnauthorized(INVALID_TOKEN);
+    if (!tokenFound || !tokenFound.valid)
+      this.logger.onUnauthorized(
+        INVALID_TOKEN,
+        tokenFound ? TOKEN_INVALIDATED : TOKEN_NOT_FOUND_DB,
+      );
 
-    // Invalidate refresh token
-    await this.prismaService.invalidateRefreshToken(refreshToken);
+    await (() => {
+      // Invalidate refresh token
+      const p1 = this.prismaService.invalidateRefreshToken(refreshToken);
 
-    // Generate new tokens
-    await this.generateTokens(res, email);
+      // Generate new tokens
+      const p2 = this.generateTokens(res, username);
 
-    return this.logger.onUserSuccess(TOKEN_REFRESH_SUCCESS, email);
+      return Promise.all([p1, p2]);
+    })();
+
+    return this.logger.onUserSuccess(TOKEN_REFRESH_SUCCESS, username);
   }
 }

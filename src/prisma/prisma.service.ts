@@ -17,13 +17,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   async findUser(
-    email: string,
+    username: string,
     select: UserSelectable = {
       id: true,
     },
   ) {
     return this.user.findUnique({
-      where: { email },
+      where: { username },
       select,
     });
   }
@@ -50,6 +50,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async createUser({
     email,
+    username,
     password,
     firstName,
     lastName,
@@ -59,6 +60,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     await this.user.create({
       data: {
         email,
+        username,
         password,
         firstName,
         lastName,
@@ -68,9 +70,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async createRefreshToken({ email, token, expiresAt }: RefreshTokenCreate) {
+  async createRefreshToken({ username, token, expiresAt }: RefreshTokenCreate) {
     await this.user.update({
-      where: { email },
+      where: { username },
       data: { refreshTokens: { create: { token, expiresAt } } },
     });
   }
@@ -93,6 +95,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
+  async deleteUser(username: string) {
+    await this.user.update({
+      where: { username },
+      data: { deleted: true },
+    });
+  }
+
   async updateAccessTokenLastUsage(id: string) {
     await this.accessToken.update({
       where: { id },
@@ -111,15 +120,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async invalidateRefreshTokens(userId: string) {
+  async invalidateRefreshTokens(username: string) {
     await this.refreshToken.updateMany({
-      where: { user: { id: userId } },
+      where: { user: { username } },
       data: { valid: false },
     });
     await this.accessToken.updateMany({
       where: {
         refreshToken: {
-          user: { id: userId },
+          user: { username },
         },
       },
       data: { valid: false },

@@ -1,5 +1,5 @@
 export interface RefreshTokenCreate {
-  email: string;
+  username: string;
   token: string;
   expiresAt: Date;
 }

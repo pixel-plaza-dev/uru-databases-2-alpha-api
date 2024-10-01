@@ -45,3 +45,9 @@ export const ACCESS_TOKEN: AuthTokenConfig = {
   }),
   options: TOKEN_OPTIONS_DEFAULT,
 } as const;
+
+// Request added properties
+export const REQUEST_USER = 'user';
+
+// Decorators
+export const IS_PUBLIC_KEY = 'isPublic';
