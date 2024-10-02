@@ -10,6 +10,7 @@ export const USER_CHANGED_PASSWORD = 'User changed password' as const;
 export const USER_FORGOT_PASSWORD = 'User forgot password' as const;
 export const USER_CHANGED_EMAIL = 'User changed email' as const;
 export const USER_UPDATED = 'User updated' as const;
+export const USER_NOTHING_TO_UPDATE = 'Nothing to update' as const;
 export const USER_DELETED = 'User deleted' as const;
 export const USER_ADDED_ROLES = 'User added roles' as const;
 

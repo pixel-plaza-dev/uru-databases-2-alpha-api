@@ -16,11 +16,13 @@ import {
   USER_DELETED,
   USER_FORGOT_PASSWORD,
   USER_LOGOUT,
+  USER_NOTHING_TO_UPDATE,
   USER_SESSIONS_CLOSED,
   USER_UPDATED,
 } from '../global/messages';
 import { LoggerService } from '../logger/logger.service';
 import { USER_WRONG_CREDENTIALS } from '../global/errors';
+import * as https from 'node:https';
 
 @Injectable()
 export class UsersService {
@@ -34,6 +36,17 @@ export class UsersService {
   async update(req: Request, user: UserUpdateDto) {
     const { username } = this.authService.getJwtDataFromRequest(req);
 
+    // Check if there are user fields to update
+    if (!Object.keys(user).length)
+      this.logger.onUserSuccess(
+        USER_NOTHING_TO_UPDATE,
+        username,
+        HttpStatus.CREATED,
+      );
+
+    // Update user fields
+    await this.prismaService.updateUser(username, { ...user });
+
     return this.logger.onUserSuccess(
       USER_UPDATED,
       username,
@@ -43,6 +56,8 @@ export class UsersService {
 
   async changePassword(req: Request, user: UserChangePasswordDto) {
     const { username } = this.authService.getJwtDataFromRequest(req);
+
+    // Compare
 
     return this.logger.onUserSuccess(
       USER_CHANGED_PASSWORD,

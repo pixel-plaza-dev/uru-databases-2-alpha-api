@@ -58,7 +58,6 @@ export class AuthGuard implements CanActivate {
 
     // Check if access token exists
     const tokenFound = await this.prismaService.findAccessToken(accessToken, {
-      id: true,
       revokedAt: true,
     });
 
@@ -70,7 +69,7 @@ export class AuthGuard implements CanActivate {
       );
 
     // Update access token last used at date
-    await this.prismaService.updateAccessTokenLastUsage(tokenFound.id);
+    await this.prismaService.updateAccessTokenLastUsage(accessToken);
 
     // Set payload to request object
     req[REQUEST_USER] = { ...payload.data };

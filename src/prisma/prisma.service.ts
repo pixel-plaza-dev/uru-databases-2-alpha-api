@@ -1,14 +1,9 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Prisma, PrismaClient, Role, UserRole } from '@prisma/client';
-import { UserCreate, UserSelectable } from './interfaces/user';
-import {
-  RefreshTokenCreate,
-  RefreshTokenSelectable,
-} from './interfaces/refresh-token';
-import {
-  AccessTokenCreate,
-  AccessTokenSelectable,
-} from './interfaces/access-token';
+import { RefreshTokenCreate } from './interfaces/refresh-token';
+import { AccessTokenCreate } from './interfaces/access-token';
+import { UserUpdateDto } from '../dto/user/user-update.dto';
+import { UserAuthSignupDto } from '../dto/user/auth/user-auth-signup.dto';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
@@ -18,7 +13,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async findUser(
     username: string,
-    select: UserSelectable = {
+    select: Prisma.UserSelect = {
       id: true,
     },
   ) {
@@ -30,7 +25,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async findRefreshToken(
     token: string,
-    select: RefreshTokenSelectable = { id: true },
+    select: Prisma.RefreshTokenSelect = { id: true },
   ) {
     return this.refreshToken.findUnique({
       where: { token },
@@ -40,7 +35,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async findAccessToken(
     token: string,
-    select: AccessTokenSelectable = { id: true },
+    select: Prisma.AccessTokenSelect = { id: true },
   ) {
     return this.accessToken.findUnique({
       where: { token },
@@ -61,7 +56,8 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     lastName,
     address,
     phone,
-  }: UserCreate) {
+    birthDate,
+  }: UserAuthSignupDto) {
     await this.user.create({
       data: {
         email,
@@ -71,6 +67,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         lastName,
         address: address ?? Prisma.skip,
         phone: phone ?? Prisma.skip,
+        birthDate: birthDate ?? Prisma.skip,
         roles: { create: { role: Role.USER } },
       },
     });
@@ -114,16 +111,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async deleteUser(username: string) {
+  async updateUser(username: string, fields: UserUpdateDto) {
     await this.user.update({
       where: { username },
-      data: { deleted: true },
+      data: { ...fields },
     });
   }
 
-  async updateAccessTokenLastUsage(id: string) {
+  async updateAccessTokenLastUsage(token: string) {
     await this.accessToken.update({
-      where: { id },
+      where: { token },
       data: { lastUsedAt: new Date() },
     });
   }
@@ -162,6 +159,13 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     await this.accessToken.update({
       where: { token },
       data: { revokedAt: new Date() },
+    });
+  }
+
+  async deleteUser(username: string) {
+    await this.user.update({
+      where: { username },
+      data: { deleted: true },
     });
   }
 }

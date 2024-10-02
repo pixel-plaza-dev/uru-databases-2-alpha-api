@@ -31,8 +31,7 @@ import {
   USER_WRONG_CREDENTIALS,
 } from '../global/errors';
 import { LoggerService } from '../logger/logger.service';
-import { UserSelectable } from '../prisma/interfaces/user';
-import { Role, UserRole } from '@prisma/client';
+import { Prisma, Role, UserRole } from '@prisma/client';
 
 export interface JwtPayload {
   data: JwtPayloadData;
@@ -59,7 +58,7 @@ export class AuthService {
   async verifyUserPassword(
     username: string,
     password: string,
-    select?: UserSelectable,
+    select?: Prisma.UserSelect,
   ) {
     // Get user password
     const userFound = await this.prismaService.findUser(username, {

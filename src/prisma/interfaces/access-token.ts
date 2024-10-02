@@ -3,12 +3,3 @@ export interface AccessTokenCreate {
   expiresAt: Date;
   refreshToken: string;
 }
-
-export interface AccessTokenSelectable {
-  id?: boolean;
-  token?: boolean;
-  expiresAt?: boolean;
-  createdAt?: boolean;
-  lastUsedAt?: boolean;
-  revokedAt?: boolean;
-}

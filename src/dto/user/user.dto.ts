@@ -1,5 +1,6 @@
 import {
   IsAlphanumeric,
+  IsDate,
   IsEmail,
   IsNotEmpty,
   IsNumberString,
@@ -61,4 +62,9 @@ export class UserDto {
   @IsNumberString()
   @ApiPropertyOptional()
   readonly phone?: string;
+
+  @IsOptional()
+  @IsDate()
+  @ApiPropertyOptional()
+  readonly birthDate?: Date;
 }
