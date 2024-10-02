@@ -85,6 +85,9 @@ export class AuthService {
   }
 
   getTokenExpiration(tokenType: AuthTokenConfig): Date {
+    console.log(tokenType);
+    console.log(tokenType.expiresIn);
+    console.log(Date.now() + tokenType.expiresIn);
     return new Date(Date.now() + tokenType.expiresIn);
   }
 
@@ -148,7 +151,12 @@ export class AuthService {
     const roles = this.extractRoles(userRoles);
 
     // Generate refresh and access token
-    const refreshToken=await this.generateToken(res, username, roles, REFRESH_TOKEN);
+    const refreshToken = await this.generateToken(
+      res,
+      username,
+      roles,
+      REFRESH_TOKEN,
+    );
     await this.generateToken(res, username, roles, ACCESS_TOKEN, refreshToken);
   }
 
@@ -233,8 +241,13 @@ export class AuthService {
       this.logger.onUnauthorized(TOKEN_EXPIRED);
     }
 
-    // Get username and roles from payload
-    const { username, roles } = payload.data;
+    // Get username from payload
+    const { username } = payload.data;
+
+    // Get updated roles
+    const userFound = await this.prismaService.findUser(username, {
+      roles: true,
+    });
 
     // Check if refresh token was found in database and is valid
     const tokenFound = await this.prismaService.findRefreshToken(refreshToken, {
@@ -251,7 +264,7 @@ export class AuthService {
       const p1 = this.prismaService.invalidateRefreshToken(refreshToken);
 
       // Generate new tokens
-      const p2 = this.generateTokens(res, username, roles);
+      const p2 = this.generateTokens(res, username, userFound.roles);
 
       return Promise.all([p1, p2]);
     })();
