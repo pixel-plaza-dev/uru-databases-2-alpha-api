@@ -26,7 +26,7 @@ model User {
   birthDate     DateTime?
   refreshTokens RefreshToken[]
   deleted       Boolean        @default(false)
-  role          UserRole       @default(USER)
+  roles         UserRole[]
 }
 
 model AccessToken {
@@ -35,7 +35,7 @@ model AccessToken {
   expiresAt      DateTime     @default(now())
   createdAt      DateTime     @default(now())
   lastUsedAt     DateTime     @default(now())
-  valid          Boolean      @default(true)
+  revokedAt      DateTime?
   refreshToken   RefreshToken @relation(fields: [refreshTokenId], references: [id], onDelete: Cascade)
   refreshTokenId String       @unique @db.ObjectId
 }
@@ -45,13 +45,23 @@ model RefreshToken {
   token       String       @unique
   createdAt   DateTime     @default(now())
   expiresAt   DateTime     @default(now())
-  valid       Boolean      @default(true)
+  revokedAt   DateTime?
   user        User         @relation(fields: [userId], references: [id])
   userId      String       @db.ObjectId
   accessToken AccessToken?
 }
 
-enum UserRole {
+enum Role {
   USER
   ADMIN
+}
+
+model UserRole {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  assignedAt DateTime @default(now())
+  role       Role
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String   @db.ObjectId
+
+  @@unique([role, userId])
 }

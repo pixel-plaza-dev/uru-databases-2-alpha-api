@@ -1,7 +1,6 @@
 import {
   IsAlphanumeric,
   IsEmail,
-  IsEnum,
   IsNotEmpty,
   IsNumberString,
   IsOptional,
@@ -10,7 +9,6 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 
 export class UserDto {
   @IsString()
@@ -63,8 +61,4 @@ export class UserDto {
   @IsNumberString()
   @ApiProperty()
   readonly phone?: string;
-
-  @IsEnum(UserRole)
-  @ApiProperty()
-  readonly role: string;
 }

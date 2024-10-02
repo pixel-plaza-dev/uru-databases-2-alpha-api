@@ -1,12 +1,7 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  SetMetadata,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
-import { ACCESS_TOKEN, IS_PUBLIC_KEY, REQUEST_USER } from '../global/config';
+import { ACCESS_TOKEN, IS_PUBLIC_KEY, REQUEST_USER, ROLES_KEY } from '../global/config';
 import {
   INVALID_TOKEN,
   TOKEN_EXPIRED,
@@ -16,9 +11,8 @@ import {
 } from '../global/errors';
 import { LoggerService } from '../logger/logger.service';
 import { Reflector } from '@nestjs/core';
-
-// Public decorator
-export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+import { Role } from '@prisma/client';
+import { ROLE_AUTH_FAILED } from '../global/messages';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -56,15 +50,15 @@ export class AuthGuard implements CanActivate {
       await this.prismaService.invalidateAccessToken(accessToken);
       this.logger.onUnauthorized(TOKEN_EXPIRED);
     }
-    // Check if access token exists
 
+    // Check if access token exists
     const tokenFound = await this.prismaService.findAccessToken(accessToken, {
       id: true,
-      valid: true,
+      revokedAt: true,
     });
 
     // Check if access token was found in database and is valid
-    if (!tokenFound || !tokenFound.valid)
+    if (!tokenFound || tokenFound.revokedAt !== null)
       this.logger.onUnauthorized(
         INVALID_TOKEN,
         tokenFound ? TOKEN_INVALIDATED : TOKEN_NOT_FOUND_DB,
@@ -76,9 +70,20 @@ export class AuthGuard implements CanActivate {
     // Set payload to request object
     req[REQUEST_USER] = { ...payload.data };
 
-    // Get username from payload
-    const username = this.authService.getUsernameFromPayload(payload);
+    // Get username and roles from payload
+    const { username, roles } = payload.data;
 
-    return this.logger.onAuthorized(username);
+    // Check if there are required roles
+    const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!requiredRoles) return this.logger.onAuthorized(username, roles);
+
+    // Check if user has some of the required roles
+    if (!requiredRoles.some((role) => roles.includes(role)))
+      this.logger.onUnauthorized(ROLE_AUTH_FAILED);
+
+    return this.logger.onAuthorizedRole(username, roles);
   }
 }

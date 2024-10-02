@@ -11,6 +11,7 @@ import {
   BCRYPT_SALT_ROUNDS,
   JWT_SECRET,
   REFRESH_TOKEN,
+  REQUEST_USER,
 } from '../global/config';
 import {
   TOKEN_REFRESH_SUCCESS,
@@ -31,6 +32,16 @@ import {
 } from '../global/errors';
 import { LoggerService } from '../logger/logger.service';
 import { UserSelectable } from '../prisma/interfaces/user';
+import { Role, UserRole } from '@prisma/client';
+
+export interface JwtPayload {
+  data: JwtPayloadData;
+}
+
+export interface JwtPayloadData {
+  username: string;
+  roles: Role[];
+}
 
 @Injectable()
 export class AuthService {
@@ -66,7 +77,7 @@ export class AuthService {
     return userFound;
   }
 
-  async signToken(data: object, expiresIn: Date) {
+  async signToken(data: JwtPayloadData, expiresIn: Date) {
     return this.jwtService.signAsync({
       exp: Math.floor(expiresIn.getTime() / 1000),
       data,
@@ -92,15 +103,20 @@ export class AuthService {
     });
   }
 
+  extractRoles(userRoles: UserRole[]): Role[] {
+    return userRoles.map((userRole) => userRole.role);
+  }
+
   async generateToken(
     res: Response,
     username: string,
+    roles: Role[],
     config: AuthTokenConfig,
     refreshToken?: string,
   ): Promise<string> {
     // Generate token
     const tokenExpiresAt = this.getTokenExpiration(config);
-    const payload = refreshToken ? { username, refreshToken } : { username };
+    const payload = { username, roles };
     const token = await this.signToken(payload, tokenExpiresAt);
 
     // Add token to user
@@ -123,10 +139,17 @@ export class AuthService {
     return token;
   }
 
-  async generateTokens(res: Response, username: string): Promise<void> {
+  async generateTokens(
+    res: Response,
+    username: string,
+    userRoles: UserRole[],
+  ): Promise<void> {
+    // Extract roles
+    const roles = this.extractRoles(userRoles);
+
     // Generate refresh and access token
-    const refreshToken = await this.generateToken(res, username, REFRESH_TOKEN);
-    await this.generateToken(res, username, ACCESS_TOKEN, refreshToken);
+    const refreshToken=await this.generateToken(res, username, roles, REFRESH_TOKEN);
+    await this.generateToken(res, username, roles, ACCESS_TOKEN, refreshToken);
   }
 
   extractTokenFromCookies(
@@ -136,12 +159,8 @@ export class AuthService {
     return req.cookies[config.name];
   }
 
-  getUsernameFromPayload(payload: any) {
-    return payload.data.username;
-  }
-
-  getUsernameFromData(data: any) {
-    return data.username;
+  getJwtDataFromRequest(req: Request): JwtPayloadData {
+    return req[REQUEST_USER];
   }
 
   async verifyToken(token: string) {
@@ -188,7 +207,8 @@ export class AuthService {
 
     // Verify user password
     const userFound = await this.verifyUserPassword(username, password, {
-      deleted: true, role: true,
+      deleted: true,
+      roles: true,
     });
 
     // Check if user exists and is not deleted
@@ -196,7 +216,7 @@ export class AuthService {
       this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
 
     // Generate tokens
-    await this.generateTokens(res, username);
+    await this.generateTokens(res, username, userFound.roles);
 
     return this.logger.onUserSuccess(USER_LOGIN, username);
   }
@@ -213,11 +233,14 @@ export class AuthService {
       this.logger.onUnauthorized(TOKEN_EXPIRED);
     }
 
-    const username = this.getUsernameFromPayload(payload);
+    // Get username and roles from payload
+    const { username, roles } = payload.data;
 
     // Check if refresh token was found in database and is valid
-    const tokenFound = await this.prismaService.findRefreshToken(refreshToken);
-    if (!tokenFound || !tokenFound.valid)
+    const tokenFound = await this.prismaService.findRefreshToken(refreshToken, {
+      revokedAt: true,
+    });
+    if (!tokenFound || tokenFound.revokedAt !== null)
       this.logger.onUnauthorized(
         INVALID_TOKEN,
         tokenFound ? TOKEN_INVALIDATED : TOKEN_NOT_FOUND_DB,
@@ -228,7 +251,7 @@ export class AuthService {
       const p1 = this.prismaService.invalidateRefreshToken(refreshToken);
 
       // Generate new tokens
-      const p2 = this.generateTokens(res, username);
+      const p2 = this.generateTokens(res, username, roles);
 
       return Promise.all([p1, p2]);
     })();

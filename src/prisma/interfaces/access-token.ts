@@ -10,5 +10,5 @@ export interface AccessTokenSelectable {
   expiresAt?: boolean;
   createdAt?: boolean;
   lastUsedAt?: boolean;
-  valid?: boolean;
+  revokedAt?: boolean;
 }

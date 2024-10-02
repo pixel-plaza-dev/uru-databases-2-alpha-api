@@ -9,5 +9,5 @@ export interface RefreshTokenSelectable {
   token?: boolean;
   expiresAt?: boolean;
   createdAt?: boolean;
-  valid?: boolean;
+  revokedAt?: boolean;
 }

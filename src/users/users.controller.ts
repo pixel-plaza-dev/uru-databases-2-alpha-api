@@ -14,9 +14,10 @@ import { UserChangeEmailDto } from '../dto/user/user-change-email.dto';
 import { UserForgotPasswordDto } from '../dto/user/user-forgot-password.dto';
 import { UserDeleteDto } from '../dto/user/user-delete';
 import { UserChangeRoleDto } from '../dto/user/user-change-role.dto';
-import { AuthGuard, Public } from '../auth/auth.guard';
+import { AuthGuard } from '../auth/auth.guard';
 import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
 import { Request } from 'express';
+import { Public } from 'src/public/public.decorator';
 
 @UseGuards(AuthGuard)
 @Controller('users')

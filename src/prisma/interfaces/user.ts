@@ -18,5 +18,5 @@ export interface UserSelectable {
   address?: boolean;
   phone?: boolean;
   deleted?: boolean;
-  role?: boolean;
+  roles?: boolean;
 }

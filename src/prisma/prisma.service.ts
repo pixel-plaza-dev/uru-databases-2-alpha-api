@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, Role } from '@prisma/client';
 import { UserCreate, UserSelectable } from './interfaces/user';
 import {
   RefreshTokenCreate,
@@ -66,6 +66,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         lastName,
         address: address ?? Prisma.skip,
         phone: phone ?? Prisma.skip,
+        roles: { create: { role: Role.USER } },
       },
     });
   }
@@ -110,20 +111,24 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   async invalidateRefreshToken(token: string) {
+    const revokedAt = new Date();
+
     await this.refreshToken.updateMany({
       where: { token },
-      data: { valid: false },
+      data: { revokedAt },
     });
     await this.accessToken.updateMany({
       where: { refreshToken: { token } },
-      data: { valid: false },
+      data: { revokedAt },
     });
   }
 
   async invalidateRefreshTokens(username: string) {
+    const revokedAt = new Date();
+
     await this.refreshToken.updateMany({
       where: { user: { username } },
-      data: { valid: false },
+      data: { revokedAt },
     });
     await this.accessToken.updateMany({
       where: {
@@ -131,14 +136,14 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
           user: { username },
         },
       },
-      data: { valid: false },
+      data: { revokedAt },
     });
   }
 
   async invalidateAccessToken(token: string) {
     await this.accessToken.update({
       where: { token },
-      data: { valid: false },
+      data: { revokedAt: new Date() },
     });
   }
 }

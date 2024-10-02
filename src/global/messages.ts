@@ -17,5 +17,9 @@ export const USER_CHANGE_ROLE = 'User role changed' as const;
 export const AUTH_FAILED = 'Authentication failed' as const;
 export const AUTH_SUCCESS = 'Authentication successful' as const;
 
+// Role messages
+export const ROLE_AUTH_FAILED = 'User does not have required roles' as const;
+export const ROLE_AUTH_SUCCESS = 'User has required roles' as const;
+
 // Token messages
 export const TOKEN_REFRESH_SUCCESS = 'Token refreshed' as const;

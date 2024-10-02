@@ -9,7 +9,7 @@ import { UserChangeRoleDto } from '../dto/user/user-change-role.dto';
 import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
 import { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
-import { REFRESH_TOKEN, REQUEST_USER } from '../global/config';
+import { REFRESH_TOKEN } from '../global/config';
 import {
   USER_CHANGE_ROLE,
   USER_CHANGED_EMAIL,
@@ -32,17 +32,8 @@ export class UsersService {
     private authService: AuthService,
   ) {}
 
-  getRequestUser(req: Request) {
-    return req[REQUEST_USER];
-  }
-
-  getUsernameFromRequest(req: Request): string {
-    const data = this.getRequestUser(req);
-    return this.authService.getUsernameFromData(data);
-  }
-
   async update(req: Request, user: UserUpdateDto) {
-    const username = this.getUsernameFromRequest(req);
+    const { username } = this.authService.getJwtDataFromRequest(req);
 
     return this.logger.onUserSuccess(
       USER_UPDATED,
@@ -52,7 +43,7 @@ export class UsersService {
   }
 
   async changePassword(req: Request, user: UserChangePasswordDto) {
-    const username = this.getUsernameFromRequest(req);
+    const { username } = this.authService.getJwtDataFromRequest(req);
 
     return this.logger.onUserSuccess(
       USER_CHANGED_PASSWORD,
@@ -62,7 +53,7 @@ export class UsersService {
   }
 
   async changeEmail(req: Request, user: UserChangeEmailDto) {
-    const username = this.getUsernameFromRequest(req);
+    const { username } = this.authService.getJwtDataFromRequest(req);
 
     return this.logger.onUserSuccess(
       USER_CHANGED_EMAIL,
@@ -80,7 +71,7 @@ export class UsersService {
   }
 
   async logout(req: Request) {
-    const username = this.getUsernameFromRequest(req);
+    const { username } = this.authService.getJwtDataFromRequest(req);
 
     // Extract refresh token from request
     const refreshToken = this.authService.extractTokenFromCookies(
@@ -96,7 +87,7 @@ export class UsersService {
 
   async closeAllSessions(req: Request, user: UserCloseAllSessionsDto) {
     const { password } = user;
-    const username = this.getUsernameFromRequest(req);
+    const { username } = this.authService.getJwtDataFromRequest(req);
 
     // Verify user password
     await this.authService.verifyUserPassword(username, password);
@@ -108,7 +99,7 @@ export class UsersService {
   }
 
   async delete(req: Request, user: UserDeleteDto) {
-    const username = this.getUsernameFromRequest(req);
+    const { username } = this.authService.getJwtDataFromRequest(req);
 
     // Compare provided username with token username
     if (username !== user.username)
@@ -131,7 +122,7 @@ export class UsersService {
   }
 
   async changeRole(req: Request, user: UserChangeRoleDto) {
-    const username = this.getUsernameFromRequest(req);
+    const { username } = this.authService.getJwtDataFromRequest(req);
 
     this.logger.onUserSuccess(USER_CHANGE_ROLE, username);
   }

@@ -7,8 +7,13 @@ import {
   Scope,
   UnauthorizedException,
 } from '@nestjs/common';
-import { AUTH_FAILED, AUTH_SUCCESS } from '../global/messages';
+import {
+  AUTH_FAILED,
+  AUTH_SUCCESS,
+  ROLE_AUTH_SUCCESS,
+} from '../global/messages';
 import { INTERNAL_SERVER_ERROR } from '../global/errors';
+import { Role } from '@prisma/client';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class LoggerService extends Logger {
@@ -17,8 +22,13 @@ export class LoggerService extends Logger {
     throw new UnauthorizedException(message);
   }
 
-  onAuthorized(username: string) {
-    super.log(`${AUTH_SUCCESS}: ${username}`);
+  onAuthorized(username: string, roles: Role[]) {
+    super.log(`${AUTH_SUCCESS}: ${username} (${roles.join(', ')})`);
+    return true;
+  }
+
+  onAuthorizedRole(username: string, role: Role) {
+    super.log(`${ROLE_AUTH_SUCCESS}: ${username} (${role})`);
     return true;
   }
 
