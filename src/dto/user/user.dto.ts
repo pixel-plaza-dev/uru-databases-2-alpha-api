@@ -8,7 +8,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UserDto {
   @IsString()
@@ -54,11 +54,11 @@ export class UserDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
-  @ApiProperty()
+  @ApiPropertyOptional()
   readonly address?: string;
 
   @IsOptional()
   @IsNumberString()
-  @ApiProperty()
+  @ApiPropertyOptional()
   readonly phone?: string;
 }

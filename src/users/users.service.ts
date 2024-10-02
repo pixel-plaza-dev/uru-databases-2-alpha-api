@@ -5,13 +5,12 @@ import { UserChangeEmailDto } from '../dto/user/user-change-email.dto';
 import { UserChangePasswordDto } from '../dto/user/user-change-password.dto';
 import { UserForgotPasswordDto } from '../dto/user/user-forgot-password.dto';
 import { UserDeleteDto } from '../dto/user/user-delete';
-import { UserChangeRoleDto } from '../dto/user/user-change-role.dto';
+import { UserAddRolesDto } from '../dto/user/user-add-roles.dto';
 import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
 import { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
 import { REFRESH_TOKEN } from '../global/config';
 import {
-  USER_CHANGE_ROLE,
   USER_CHANGED_EMAIL,
   USER_CHANGED_PASSWORD,
   USER_DELETED,
@@ -121,9 +120,26 @@ export class UsersService {
     this.logger.onUserSuccess(USER_DELETED, username);
   }
 
-  async changeRole(req: Request, user: UserChangeRoleDto) {
+  async addRoles(req: Request, user: UserAddRolesDto) {
     const { username } = this.authService.getJwtDataFromRequest(req);
+    const { username: targetUsername } = user;
 
-    this.logger.onUserSuccess(USER_CHANGE_ROLE, username);
+    // Check if the user has some roles
+    const userRoles = await this.prismaService.getUserRoles(targetUsername);
+
+    // Extract roles
+    const roles = this.authService.extractRoles(userRoles);
+
+    // Filter out roles that are already assigned
+    const filteredRoles = user.roles.filter((role) => !roles.includes(role));
+
+    // Add roles to user
+    await this.prismaService.addUserRoles(targetUsername, filteredRoles);
+
+    return this.logger.onUserAddedRolesSuccess(
+      username,
+      targetUsername,
+      filteredRoles,
+    );
   }
 }

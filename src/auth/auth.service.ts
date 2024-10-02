@@ -242,9 +242,7 @@ export class AuthService {
     const { username } = payload.data;
 
     // Get updated roles
-    const userFound = await this.prismaService.findUser(username, {
-      roles: true,
-    });
+    const userRoles = await this.prismaService.getUserRoles(username);
 
     // Check if refresh token was found in database and is valid
     const tokenFound = await this.prismaService.findRefreshToken(refreshToken, {
@@ -261,7 +259,7 @@ export class AuthService {
       const p1 = this.prismaService.invalidateRefreshToken(refreshToken);
 
       // Generate new tokens
-      const p2 = this.generateTokens(res, username, userFound.roles);
+      const p2 = this.generateTokens(res, username, userRoles);
 
       return Promise.all([p1, p2]);
     })();

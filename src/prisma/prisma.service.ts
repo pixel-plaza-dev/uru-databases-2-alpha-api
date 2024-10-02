@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { Prisma, PrismaClient, Role } from '@prisma/client';
+import { Prisma, PrismaClient, Role, UserRole } from '@prisma/client';
 import { UserCreate, UserSelectable } from './interfaces/user';
 import {
   RefreshTokenCreate,
@@ -48,6 +48,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
+  async getUserRoles(username: string): Promise<UserRole[]> {
+    const { roles } = await this.findUser(username, { roles: true });
+    return roles;
+  }
+
   async createUser({
     email,
     username,
@@ -67,6 +72,19 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         address: address ?? Prisma.skip,
         phone: phone ?? Prisma.skip,
         roles: { create: { role: Role.USER } },
+      },
+    });
+  }
+
+  async addUserRoles(username: string, roles: Role[]) {
+    await this.user.update({
+      where: { username },
+      data: {
+        roles: {
+          createMany: {
+            data: roles.map((role) => ({ role })),
+          },
+        },
       },
     });
   }

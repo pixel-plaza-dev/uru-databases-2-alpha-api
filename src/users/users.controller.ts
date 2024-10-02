@@ -13,11 +13,13 @@ import { UserChangePasswordDto } from '../dto/user/user-change-password.dto';
 import { UserChangeEmailDto } from '../dto/user/user-change-email.dto';
 import { UserForgotPasswordDto } from '../dto/user/user-forgot-password.dto';
 import { UserDeleteDto } from '../dto/user/user-delete';
-import { UserChangeRoleDto } from '../dto/user/user-change-role.dto';
+import { UserAddRolesDto } from '../dto/user/user-add-roles.dto';
 import { AuthGuard } from '../auth/auth.guard';
 import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
 import { Request } from 'express';
 import { Public } from 'src/public/public.decorator';
+import { Role } from '@prisma/client';
+import { Roles } from '../roles/roles.decorator';
 
 @UseGuards(AuthGuard)
 @Controller('users')
@@ -66,8 +68,9 @@ export class UsersController {
     return this.usersService.delete(req, user);
   }
 
-  @Post('change-role')
-  async setAdmin(@Req() req: Request, @Body() user: UserChangeRoleDto) {
-    return this.usersService.changeRole(req, user);
+  @Roles(Role.ADMIN)
+  @Post('add-roles')
+  async setAdmin(@Req() req: Request, @Body() user: UserAddRolesDto) {
+    return this.usersService.addRoles(req, user);
   }
 }

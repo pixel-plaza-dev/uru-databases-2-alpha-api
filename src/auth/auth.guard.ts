@@ -1,7 +1,12 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthService } from './auth.service';
-import { ACCESS_TOKEN, IS_PUBLIC_KEY, REQUEST_USER, ROLES_KEY } from '../global/config';
+import {
+  ACCESS_TOKEN,
+  IS_PUBLIC_KEY,
+  REQUEST_USER,
+  ROLES_KEY,
+} from '../global/config';
 import {
   INVALID_TOKEN,
   TOKEN_EXPIRED,

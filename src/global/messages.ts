@@ -11,7 +11,13 @@ export const USER_FORGOT_PASSWORD = 'User forgot password' as const;
 export const USER_CHANGED_EMAIL = 'User changed email' as const;
 export const USER_UPDATED = 'User updated' as const;
 export const USER_DELETED = 'User deleted' as const;
-export const USER_CHANGE_ROLE = 'User role changed' as const;
+export const USER_ADDED_ROLES = 'User added roles' as const;
+
+// User role messages
+export const getAddedRoleUserMessage = (
+  username: string,
+  targetUsername: string,
+) => `User ${username} added role to ${targetUsername}` as const;
 
 // Authentication messages
 export const AUTH_FAILED = 'Authentication failed' as const;

@@ -10,7 +10,9 @@ import {
 import {
   AUTH_FAILED,
   AUTH_SUCCESS,
+  getAddedRoleUserMessage,
   ROLE_AUTH_SUCCESS,
+  USER_ADDED_ROLES,
 } from '../global/messages';
 import { INTERNAL_SERVER_ERROR } from '../global/errors';
 import { Role } from '@prisma/client';
@@ -59,6 +61,19 @@ export class LoggerService extends Logger {
     return {
       statusCode,
       message: message,
+    };
+  }
+
+  onUserAddedRolesSuccess(
+    username: string,
+    targetUsername: string,
+    roles: Role[],
+  ) {
+    const message = getAddedRoleUserMessage(username, targetUsername);
+    super.log(`${message}: ${roles.join(', ')}`);
+    return {
+      statusCode: HttpStatus.CREATED,
+      message: USER_ADDED_ROLES,
     };
   }
 }
