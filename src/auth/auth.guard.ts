@@ -52,14 +52,19 @@ export class AuthGuard implements CanActivate {
     // Verify access token
     const payload = await this.authService.verifyToken(accessToken);
     if (payload === null) {
-      await this.prismaService.invalidateAccessToken(accessToken);
+      // Revoke access token
+      await this.prismaService.revokeAccessToken(accessToken);
+
       this.logger.onUnauthorized(TOKEN_EXPIRED);
     }
 
     // Check if access token exists
-    const tokenFound = await this.prismaService.findAccessToken(accessToken, {
-      revokedAt: true,
-    });
+    const tokenFound = await this.prismaService.findJwtAccessToken(
+      accessToken,
+      {
+        revokedAt: true,
+      },
+    );
 
     // Check if access token was found in database and is valid
     if (!tokenFound || tokenFound.revokedAt !== null)

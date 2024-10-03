@@ -20,6 +20,7 @@ import { Request } from 'express';
 import { Public } from 'src/public/public.decorator';
 import { Role } from '@prisma/client';
 import { Roles } from '../roles/roles.decorator';
+import { UserChangeUsernameDto } from '../dto/user/user-change-username.dto';
 
 @UseGuards(AuthGuard)
 @Controller('users')
@@ -29,6 +30,14 @@ export class UsersController {
   @Patch()
   async update(@Req() req: Request, @Body() user: UserUpdateDto) {
     return this.usersService.update(req, user);
+  }
+
+  @Patch('change-username')
+  async changeUsername(
+    @Req() req: Request,
+    @Body() user: UserChangeUsernameDto,
+  ) {
+    return this.usersService.changeUsername(req, user);
   }
 
   @Patch('change-password')
@@ -42,6 +51,11 @@ export class UsersController {
   @Patch('change-email')
   async changeEmail(@Req() req: Request, @Body() user: UserChangeEmailDto) {
     return this.usersService.changeEmail(req, user);
+  }
+
+  @Post('send-email-verification-token')
+  async getEmailVerificationToken(@Req() req: Request) {
+    return this.usersService.sendEmailVerificationToken(req);
   }
 
   @Public()

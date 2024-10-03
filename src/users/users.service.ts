@@ -21,8 +21,12 @@ import {
   USER_UPDATED,
 } from '../global/messages';
 import { LoggerService } from '../logger/logger.service';
-import { USER_WRONG_CREDENTIALS } from '../global/errors';
-import * as https from 'node:https';
+import {
+  USER_PASSWORDS_DO_NOT_MATCH,
+  USER_REGISTERED,
+  USER_WRONG_CREDENTIALS,
+} from '../global/errors';
+import { UserChangeUsernameDto } from '../dto/user/user-change-username.dto';
 
 @Injectable()
 export class UsersService {
@@ -45,7 +49,7 @@ export class UsersService {
       );
 
     // Update user fields
-    await this.prismaService.updateUser(username, { ...user });
+    await this.prismaService.updateUser(username, user);
 
     return this.logger.onUserSuccess(
       USER_UPDATED,
@@ -54,20 +58,9 @@ export class UsersService {
     );
   }
 
-  async changePassword(req: Request, user: UserChangePasswordDto) {
-    const { username } = this.authService.getJwtDataFromRequest(req);
-
-    // Compare
-
-    return this.logger.onUserSuccess(
-      USER_CHANGED_PASSWORD,
-      username,
-      HttpStatus.CREATED,
-    );
-  }
-
   async changeEmail(req: Request, user: UserChangeEmailDto) {
     const { username } = this.authService.getJwtDataFromRequest(req);
+    // HERE, WE SHOULD SEND A TOKEN TO THE GIVEN EMAIL TO VERIFY IT
 
     return this.logger.onUserSuccess(
       USER_CHANGED_EMAIL,
@@ -76,12 +69,67 @@ export class UsersService {
     );
   }
 
-  async forgotPassword(user: UserForgotPasswordDto) {
+  async changeUsername(req: Request, { newUsername }: UserChangeUsernameDto) {
+    const { username } = this.authService.getJwtDataFromRequest(req);
+
+    // Check if user exists
+    const userExists = await this.prismaService.findUser(username);
+
+    if (userExists) this.logger.onUserBadRequest(USER_REGISTERED, username);
+
+    // Update username
+    await this.prismaService.updateUsername(username, newUsername);
+
+    // SEND NOTIFICATION TO EMAIL...
+
     return this.logger.onUserSuccess(
-      USER_FORGOT_PASSWORD,
-      user.username,
+      USER_CHANGED_EMAIL,
+      username,
       HttpStatus.CREATED,
     );
+  }
+
+  async changePassword(
+    req: Request,
+    { password, currentPassword, confirmPassword }: UserChangePasswordDto,
+  ) {
+    const { username } = this.authService.getJwtDataFromRequest(req);
+
+    // Verify current password
+    await this.authService.verifyUserPassword(username, currentPassword);
+
+    // Compare new password with confirm password
+    if (password !== confirmPassword)
+      this.logger.onUserBadRequest(USER_PASSWORDS_DO_NOT_MATCH, username);
+
+    // Change user password
+    await this.prismaService.updatePassword(username, password);
+
+    // SEND NOTIFICATION TO EMAIL...
+
+    return this.logger.onUserSuccess(
+      USER_CHANGED_PASSWORD,
+      username,
+      HttpStatus.CREATED,
+    );
+  }
+
+  async forgotPassword({ username, email }: UserForgotPasswordDto) {
+    // Generate password reset token
+    // NOTE: This method returns a token that should be sent to the user's email
+    await this.authService.createPasswordResetToken(username, email);
+
+    // SEND PASSWORD RESET TOKEN TO EMAIL...
+
+    return this.logger.onUserSuccess(
+      USER_FORGOT_PASSWORD,
+      username,
+      HttpStatus.CREATED,
+    );
+  }
+
+  async sendEmailVerificationToken(req: Request) {
+    // HERE, WE SHOULD SEND A TOKEN TO THE GIVEN EMAIL TO VERIFY IT
   }
 
   async logout(req: Request) {
@@ -93,66 +141,68 @@ export class UsersService {
       REFRESH_TOKEN,
     );
 
-    // Invalidate refresh token
-    await this.prismaService.invalidateRefreshToken(refreshToken);
+    // Revoke refresh token
+    await this.prismaService.revokeRefreshToken(refreshToken);
 
     return this.logger.onUserSuccess(USER_LOGOUT, username);
   }
 
-  async closeAllSessions(req: Request, user: UserCloseAllSessionsDto) {
-    const { password } = user;
+  async closeAllSessions(req: Request, { password }: UserCloseAllSessionsDto) {
     const { username } = this.authService.getJwtDataFromRequest(req);
 
     // Verify user password
     await this.authService.verifyUserPassword(username, password);
 
-    // Invalidate all refresh and access tokens
-    await this.prismaService.invalidateRefreshTokens(username);
+    // Revoke all refresh and its access tokens
+    await this.prismaService.revokeRefreshTokens(username);
 
     return this.logger.onUserSuccess(USER_SESSIONS_CLOSED, username);
   }
 
-  async delete(req: Request, user: UserDeleteDto) {
+  async delete(
+    req: Request,
+    { username: deleteUsername, password }: UserDeleteDto,
+  ) {
     const { username } = this.authService.getJwtDataFromRequest(req);
 
     // Compare provided username with token username
-    if (username !== user.username)
+    if (username !== deleteUsername)
       this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
 
     // Verify user password
-    await this.authService.verifyUserPassword(username, user.password);
+    await this.authService.verifyUserPassword(username, password);
 
-    await (() => {
-      // Invalidate all refresh and access tokens
-      const p1 = this.prismaService.invalidateRefreshTokens(username);
-
-      // Delete user
-      const p2 = this.prismaService.deleteUser(username);
-
-      return Promise.all([p1, p2]);
-    })();
+    // Delete user
+    await this.prismaService.deleteUser(username);
 
     this.logger.onUserSuccess(USER_DELETED, username);
   }
 
-  async addRoles(req: Request, user: UserAddRolesDto) {
-    const { username } = this.authService.getJwtDataFromRequest(req);
-    const { username: targetUsername } = user;
+  async addRoles(
+    req: Request,
+    { username: targetUsername, roles: targetRoles }: UserAddRolesDto,
+  ) {
+    const { username: triggeredByUsername } =
+      this.authService.getJwtDataFromRequest(req);
 
     // Check if the user has some roles
-    const userRoles = await this.prismaService.getUserRoles(targetUsername);
+    const userRoles = await this.prismaService.findUserRoles(targetUsername);
 
     // Extract roles
     const roles = this.authService.extractRoles(userRoles);
 
     // Filter out roles that are already assigned
-    const filteredRoles = user.roles.filter((role) => !roles.includes(role));
+    const filteredRoles = targetRoles.filter((role) => !roles.includes(role));
 
     // Add roles to user
-    await this.prismaService.addUserRoles(targetUsername, filteredRoles);
+    await this.prismaService.addUserRoles(
+      triggeredByUsername,
+      targetUsername,
+      filteredRoles,
+    );
 
     return this.logger.onUserAddedRolesSuccess(
-      username,
+      triggeredByUsername,
       targetUsername,
       filteredRoles,
     );

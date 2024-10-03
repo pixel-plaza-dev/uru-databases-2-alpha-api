@@ -26,7 +26,7 @@ model User {
   phone                   String?
   birthDate               DateTime?
   deleted                 Boolean                  @default(false)
-  jwtTokens               JwtToken[]
+  jwtRefreshTokens        JwtRefreshToken[]
   roles                   UserRole[]
   usernameHistory         UsernameHistory[]
   emailVerificationTokens EmailVerificationToken[]
@@ -42,6 +42,7 @@ model EmailVerificationToken {
   email      String
   expiresAt  DateTime  @default(now())
   createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
   verifiedAt DateTime?
   user       User      @relation(fields: [userId], references: [id])
   userId     String    @db.ObjectId
@@ -53,6 +54,7 @@ model PasswordResetToken {
   email     String
   expiresAt DateTime  @default(now())
   createdAt DateTime  @default(now())
+  revokedAt DateTime?
   usedAt    DateTime?
   user      User      @relation(fields: [userId], references: [id])
   userId    String    @db.ObjectId
@@ -74,26 +76,27 @@ model PasswordHistory {
   userId     String   @db.ObjectId
 }
 
-model JwtTokenData {
-  id           String    @id @default(auto()) @map("_id") @db.ObjectId
-  expiresAt    DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  lastUsedAt   DateTime  @default(now())
-  revokedAt    DateTime?
-  accessToken  JwtToken? @relation(name: "refreshTokenData")
-  refreshToken JwtToken? @relation(name: "accessTokenData")
+model JwtAccessToken {
+  id              String           @id @default(auto()) @map("_id") @db.ObjectId
+  token           String           @unique
+  expiresAt       DateTime         @default(now())
+  createdAt       DateTime         @default(now())
+  lastUsedAt      DateTime         @default(now())
+  revokedAt       DateTime?
+  jwtRefreshToken JwtRefreshToken?
 }
 
-model JwtToken {
-  id                 String       @id @default(auto()) @map("_id") @db.ObjectId
-  refreshToken       String       @unique
-  refreshTokenData   JwtTokenData @relation(name: "refreshTokenData", fields: [refreshTokenDataId], references: [id])
-  refreshTokenDataId String       @unique @db.ObjectId
-  accessToken        String       @unique
-  accessTokenData    JwtTokenData @relation(name: "accessTokenData", fields: [accessTokenDataId], references: [id])
-  accessTokenDataId  String       @unique @db.ObjectId
-  user               User         @relation(fields: [userId], references: [id])
-  userId             String       @db.ObjectId
+model JwtRefreshToken {
+  id               String         @id @default(auto()) @map("_id") @db.ObjectId
+  token            String         @unique
+  expiresAt        DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+  usedAt           DateTime       @default(now())
+  revokedAt        DateTime?
+  jwtAccessToken   JwtAccessToken @relation(fields: [jwtAccessTokenId], references: [id])
+  jwtAccessTokenId String         @unique @db.ObjectId
+  user             User           @relation(fields: [userId], references: [id])
+  userId           String         @db.ObjectId
 }
 
 enum Role {

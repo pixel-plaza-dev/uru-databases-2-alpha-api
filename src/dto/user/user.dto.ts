@@ -22,6 +22,12 @@ export class UserDto {
   @ApiProperty()
   readonly email: string;
 
+  @IsOptional()
+  @IsEmail()
+  @IsNotEmpty()
+  @ApiPropertyOptional()
+  readonly secondaryEmail: string;
+
   @IsAlphanumeric()
   @IsNotEmpty()
   @ApiProperty()

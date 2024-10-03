@@ -7,9 +7,12 @@ import * as bcrypt from 'bcrypt';
 import { UserAuthSignupDto } from '../dto/user/auth/user-auth-signup.dto';
 import {
   ACCESS_TOKEN,
-  AuthTokenConfig,
   BCRYPT_SALT_ROUNDS,
+  EMAIL_VERIFICATION,
+  Expiration,
   JWT_SECRET,
+  JwtTokenConfig,
+  PASSWORD_RESET,
   REFRESH_TOKEN,
   REQUEST_USER,
 } from '../global/config';
@@ -32,6 +35,7 @@ import {
 } from '../global/errors';
 import { LoggerService } from '../logger/logger.service';
 import { Prisma, Role, UserRole } from '@prisma/client';
+import { awaitConcurrently } from '../utils/execute-concurrently';
 
 export interface JwtPayload {
   data: JwtPayloadData;
@@ -83,14 +87,14 @@ export class AuthService {
     });
   }
 
-  getTokenExpiration(tokenType: AuthTokenConfig): Date {
-    return new Date(Date.now() + tokenType.expiresIn);
+  getExpiration(expiration: Expiration): Date {
+    return new Date(Date.now() + expiration.expiresIn);
   }
 
   setTokenCookie(
     res: Response,
     token: string,
-    tokenType: AuthTokenConfig,
+    tokenType: JwtTokenConfig,
     expires: Date,
   ): void {
     const { httpOnly, secure, sameSite } = tokenType.options;
@@ -106,39 +110,7 @@ export class AuthService {
     return userRoles.map((userRole) => userRole.role);
   }
 
-  async generateToken(
-    res: Response,
-    username: string,
-    roles: Role[],
-    config: AuthTokenConfig,
-    refreshToken?: string,
-  ): Promise<string> {
-    // Generate token
-    const tokenExpiresAt = this.getTokenExpiration(config);
-    const payload = { username, roles };
-    const token = await this.signToken(payload, tokenExpiresAt);
-
-    // Add token to user
-    if (!refreshToken)
-      await this.prismaService.createRefreshToken({
-        username,
-        token,
-        expiresAt: tokenExpiresAt,
-      });
-    else
-      await this.prismaService.createAccessToken({
-        token,
-        expiresAt: tokenExpiresAt,
-        refreshToken,
-      });
-
-    // Set token cookie
-    this.setTokenCookie(res, token, config, tokenExpiresAt);
-
-    return token;
-  }
-
-  async generateTokens(
+  async createJwtTokens(
     res: Response,
     username: string,
     userRoles: UserRole[],
@@ -146,19 +118,30 @@ export class AuthService {
     // Extract roles
     const roles = this.extractRoles(userRoles);
 
-    // Generate refresh and access token
-    const refreshToken = await this.generateToken(
-      res,
+    // Generate refresh and access tokens expiration
+    const refreshExpiresAt = this.getExpiration(REFRESH_TOKEN);
+    const accessExpiresAt = this.getExpiration(ACCESS_TOKEN);
+
+    // Generate refresh and access tokens
+    const payload = { username, roles };
+    const refreshToken = await this.signToken(payload, refreshExpiresAt);
+    const accessToken = await this.signToken(payload, accessExpiresAt);
+
+    // Add token to user
+    await this.prismaService.createJwtRefreshToken(
       username,
-      roles,
-      REFRESH_TOKEN,
+      { expiresAt: refreshExpiresAt, token: refreshToken },
+      { expiresAt: accessExpiresAt, token: accessToken },
     );
-    await this.generateToken(res, username, roles, ACCESS_TOKEN, refreshToken);
+
+    // Set refresh and access token cookies
+    this.setTokenCookie(res, refreshToken, REFRESH_TOKEN, refreshExpiresAt);
+    this.setTokenCookie(res, accessToken, ACCESS_TOKEN, accessExpiresAt);
   }
 
   extractTokenFromCookies(
     req: Request,
-    config: AuthTokenConfig,
+    config: JwtTokenConfig,
   ): string | undefined {
     return req.cookies[config.name];
   }
@@ -183,6 +166,9 @@ export class AuthService {
   async signup(user: UserAuthSignupDto) {
     const { username, password, confirmPassword } = user;
 
+    // Get email verification token expiration
+    const expiresAt = this.getExpiration(EMAIL_VERIFICATION);
+
     // Check if user exists
     const userExists = await this.prismaService.findUser(username);
     if (userExists) this.logger.onUserBadRequest(USER_REGISTERED, username);
@@ -199,7 +185,10 @@ export class AuthService {
         if (err) this.logger.onInternalServerError(BCYPT_ERROR, err.name);
 
         // Create user
-        await this.prismaService.createUser({ ...user, password: hash });
+        await this.prismaService.createUser(
+          { ...user, password: hash },
+          { expiresAt },
+        );
       },
     );
 
@@ -219,8 +208,8 @@ export class AuthService {
     if (!userFound || userFound.deleted)
       this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
 
-    // Generate tokens
-    await this.generateTokens(res, username, userFound.roles);
+    // Create JWT tokens
+    await this.createJwtTokens(res, username, userFound.roles);
 
     return this.logger.onUserSuccess(USER_LOGIN, username);
   }
@@ -233,7 +222,9 @@ export class AuthService {
     // Verify refresh token
     const payload = await this.verifyToken(refreshToken);
     if (payload === null) {
-      await this.prismaService.invalidateRefreshToken(refreshToken);
+      // Revoke refresh token
+      await this.prismaService.revokeRefreshToken(refreshToken);
+
       this.logger.onUnauthorized(TOKEN_EXPIRED);
     }
 
@@ -241,28 +232,72 @@ export class AuthService {
     const { username } = payload.data;
 
     // Get updated roles
-    const userRoles = await this.prismaService.getUserRoles(username);
+    const userRoles = await this.prismaService.findUserRoles(username);
 
     // Check if refresh token was found in database and is valid
-    const tokenFound = await this.prismaService.findRefreshToken(refreshToken, {
-      revokedAt: true,
-    });
+    const tokenFound = await this.prismaService.findJwtRefreshToken(
+      refreshToken,
+      {
+        revokedAt: true,
+      },
+    );
     if (!tokenFound || tokenFound.revokedAt !== null)
       this.logger.onUnauthorized(
         INVALID_TOKEN,
         tokenFound ? TOKEN_INVALIDATED : TOKEN_NOT_FOUND_DB,
       );
 
-    await (() => {
-      // Invalidate refresh token
-      const p1 = this.prismaService.invalidateRefreshToken(refreshToken);
+    // Set refresh token as used
+    const setRefreshTokenAsUsed =
+      this.prismaService.setRefreshTokenAsUsed(refreshToken);
 
-      // Generate new tokens
-      const p2 = this.generateTokens(res, username, userRoles);
+    // Revoke refresh token
+    const revokeRefreshToken =
+      this.prismaService.revokeRefreshToken(refreshToken);
 
-      return Promise.all([p1, p2]);
-    })();
+    // Create JWT tokens
+    const createJwtTokens = this.createJwtTokens(res, username, userRoles);
+
+    await awaitConcurrently(
+      setRefreshTokenAsUsed,
+      revokeRefreshToken,
+      createJwtTokens,
+    );
 
     return this.logger.onUserSuccess(TOKEN_REFRESH_SUCCESS, username);
+  }
+
+  async createEmailVerificationToken(
+    username: string,
+    email: string,
+  ): Promise<string> {
+    // Get expiration date
+    const expiresAt = this.getExpiration(EMAIL_VERIFICATION);
+
+    // Add email verification token
+    const emailVerificationToken =
+      await this.prismaService.createEmailVerificationToken(username, {
+        email,
+        expiresAt,
+      });
+
+    return emailVerificationToken.uuid;
+  }
+
+  async createPasswordResetToken(
+    username: string,
+    email: string,
+  ): Promise<string> {
+    // Get expiration date
+    const expiresAt = this.getExpiration(PASSWORD_RESET);
+
+    // Add password reset token
+    const passwordResetToken =
+      await this.prismaService.createPasswordResetToken(username, {
+        email,
+        expiresAt,
+      });
+
+    return passwordResetToken.uuid;
   }
 }

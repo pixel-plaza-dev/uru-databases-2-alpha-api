@@ -11,26 +11,29 @@ export const BCRYPT_SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS);
 export const JWT_SECRET = process.env.JWT_SECRET;
 
 // Tokens Options
-export interface AuthTokenOptions {
+export interface JwtTokenOptions {
   readonly secure: boolean;
   readonly httpOnly: boolean;
   readonly sameSite: 'strict' | 'lax' | 'none';
 }
 
-export const TOKEN_OPTIONS_DEFAULT: AuthTokenOptions = {
+export const TOKEN_OPTIONS_DEFAULT: JwtTokenOptions = {
   secure: IS_PRODUCTION,
   httpOnly: true,
   sameSite: 'strict',
 } as const;
 
 // Tokens
-export interface AuthTokenConfig {
-  readonly name: string;
+export interface Expiration {
   readonly expiresIn: number;
-  readonly options: AuthTokenOptions;
 }
 
-export const REFRESH_TOKEN: AuthTokenConfig = {
+export interface JwtTokenConfig extends Expiration {
+  readonly name: string;
+  readonly options: JwtTokenOptions;
+}
+
+export const REFRESH_TOKEN: JwtTokenConfig = {
   name: process.env.REFRESH_TOKEN,
   expiresIn: convertToMilliseconds({
     days: parseInt(process.env.REFRESH_TOKEN_EXPIRES_IN_DAYS),
@@ -38,12 +41,26 @@ export const REFRESH_TOKEN: AuthTokenConfig = {
   options: TOKEN_OPTIONS_DEFAULT,
 } as const;
 
-export const ACCESS_TOKEN: AuthTokenConfig = {
+export const ACCESS_TOKEN: JwtTokenConfig = {
   name: process.env.ACCESS_TOKEN,
   expiresIn: convertToMilliseconds({
     minutes: parseInt(process.env.ACCESS_TOKEN_EXPIRES_IN_MINUTES),
   }),
   options: TOKEN_OPTIONS_DEFAULT,
+} as const;
+
+// Email verification
+export const EMAIL_VERIFICATION: Expiration = {
+  expiresIn: convertToMilliseconds({
+    hours: parseInt(process.env.EMAIL_VERIFICATION_EXPIRES_IN_HOURS),
+  }),
+} as const;
+
+// Password reset
+export const PASSWORD_RESET: Expiration = {
+  expiresIn: convertToMilliseconds({
+    hours: parseInt(process.env.PASSWORD_RESET_EXPIRES_IN_MINUTES),
+  }),
 } as const;
 
 // Request added properties

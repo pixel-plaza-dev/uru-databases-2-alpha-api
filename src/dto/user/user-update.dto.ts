@@ -8,5 +8,6 @@ export class UserUpdateDto extends PartialType(
     'birthDate',
     'firstName',
     'lastName',
+    'secondaryEmail',
   ] as const),
 ) {}

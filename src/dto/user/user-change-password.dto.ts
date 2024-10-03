@@ -3,7 +3,6 @@ import { ApiProperty, PickType } from '@nestjs/swagger';
 import { UserDto } from './user.dto';
 
 export class UserChangePasswordDto extends PickType(UserDto, [
-  'email',
   'password',
   'confirmPassword',
 ] as const) {
