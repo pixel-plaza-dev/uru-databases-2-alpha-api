@@ -1,18 +1,17 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import {
-  EmailVerificationToken,
-  JwtToken,
-  JwtTokenData,
-  PasswordResetToken,
   Prisma,
   PrismaClient,
   Role,
-  User,
   UserRole,
   UserRoleAction,
 } from '@prisma/client';
-import { UserUpdateDto } from '../dto/user/user-update.dto';
 import { awaitConcurrently } from '../utils/execute-concurrently';
+import { JwtTokenCreate } from './types/jwt-token';
+import { JwtTokenDataCreate } from './types/jwt-token-data';
+import { UserCreate, UserUpdate } from './types/user';
+import { EmailVerificationTokenCreate } from './types/email-verification-token';
+import { PasswordResetTokenCreate } from './types/password-reset-token';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
@@ -97,7 +96,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     address,
     phone,
     birthDate,
-  }: User) {
+  }: UserCreate) {
     await this.user.create({
       data: {
         email,
@@ -115,9 +114,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async createEmailVerification(
+  async createEmailVerificationToken(
     username: string,
-    { email, expiresAt }: EmailVerificationToken,
+    { email, expiresAt }: EmailVerificationTokenCreate,
   ) {
     await this.user.update({
       where: { username },
@@ -127,7 +126,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async createPasswordReset(
     username: string,
-    { email, expiresAt }: PasswordResetToken,
+    { email, expiresAt }: PasswordResetTokenCreate,
   ) {
     await this.user.update({
       where: { username },
@@ -137,9 +136,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async createJwtToken(
     username: string,
-    { refreshToken, accessToken }: JwtToken,
-    { expiresAt: refreshExpiresAt }: JwtTokenData,
-    { expiresAt: accessExpiresAt }: JwtTokenData,
+    { refreshToken, accessToken }: JwtTokenCreate,
+    { expiresAt: refreshExpiresAt }: JwtTokenDataCreate,
+    { expiresAt: accessExpiresAt }: JwtTokenDataCreate,
   ) {
     await this.user.update({
       where: { username },
@@ -156,7 +155,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async updateUser(username: string, fields: UserUpdateDto) {
+  async updateUser(username: string, fields: UserUpdate) {
     await this.user.update({
       where: { username },
       data: { ...fields },
