@@ -1,7 +1,7 @@
 import { Body, Controller, Post, Req, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { UserAuthLoginDto } from '../dto/user/auth/user-auth-login.dto';
-import { UserAuthSignupDto } from '../dto/user/auth/user-auth-signup.dto';
+import { UserAuthLoginDto } from '../../dto/user/auth/user-auth-login.dto';
+import { UserAuthSignupDto } from '../../dto/user/auth/user-auth-signup.dto';
 import { Request, Response } from 'express';
 
 @Controller('auth')
@@ -15,10 +15,11 @@ export class AuthController {
 
   @Post('login')
   async login(
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
     @Body() user: UserAuthLoginDto,
   ) {
-    return this.authService.login(res, user);
+    return this.authService.login(req, res, user);
   }
 
   @Post('refresh')

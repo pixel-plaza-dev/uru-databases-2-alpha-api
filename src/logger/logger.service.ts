@@ -10,12 +10,12 @@ import {
 import {
   AUTH_FAILED,
   AUTH_SUCCESS,
-  getAddedRoleUserMessage,
   ROLE_AUTH_SUCCESS,
   USER_ADDED_ROLES,
+  USER_REMOVED_ROLES,
 } from '../global/messages';
 import { INTERNAL_SERVER_ERROR } from '../global/errors';
-import { Role } from '@prisma/client';
+import { Role, UserRoleAction } from '@prisma/client';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class LoggerService extends Logger {
@@ -39,8 +39,10 @@ export class LoggerService extends Logger {
     throw new BadRequestException(message);
   }
 
-  onInternalServerError(message: string, errorMessage: string) {
-    super.error(`${message}: ${errorMessage}`);
+  onInternalServerError(message: string, errorMessage?: string) {
+    if (!errorMessage) super.error(message);
+    else super.error(`${message}: ${errorMessage}`);
+
     throw new InternalServerErrorException(INTERNAL_SERVER_ERROR);
   }
 
@@ -57,20 +59,25 @@ export class LoggerService extends Logger {
     username: string,
     statusCode: HttpStatus = HttpStatus.CREATED,
   ) {
-    super.log(`${message}: ${username}`);
+    super.log(`${message} (${username})`);
     return {
       statusCode,
       message: message,
     };
   }
 
-  onUserAddedRolesSuccess(
-    username: string,
+  onUserRolesUpdateSuccess(
+    triggeredByUsername: string,
     targetUsername: string,
+    userRoleAction: UserRoleAction,
     roles: Role[],
   ) {
-    const message = getAddedRoleUserMessage(username, targetUsername);
-    super.log(`${message}: ${roles.join(', ')}`);
+    const message =
+      userRoleAction === UserRoleAction.ADD
+        ? USER_ADDED_ROLES
+        : USER_REMOVED_ROLES;
+
+    super.log(`${message}: ${triggeredByUsername}  ${roles.join(', ')}`);
     return {
       statusCode: HttpStatus.CREATED,
       message: USER_ADDED_ROLES,

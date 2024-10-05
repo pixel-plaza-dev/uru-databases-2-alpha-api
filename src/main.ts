@@ -15,6 +15,12 @@ import { SERVER_PORT } from './global/config';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Get the underlying Express instance
+  const expressApp = app.getHttpAdapter().getInstance();
+
+  // Set trust proxy
+  expressApp.set('trust proxy', true);
+
   // Add security headers
   app.use(helmet());
 

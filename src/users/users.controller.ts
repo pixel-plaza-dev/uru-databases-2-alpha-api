@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Param,
   Patch,
   Post,
   Req,
@@ -13,14 +14,15 @@ import { UserChangePasswordDto } from '../dto/user/user-change-password.dto';
 import { UserChangeEmailDto } from '../dto/user/user-change-email.dto';
 import { UserForgotPasswordDto } from '../dto/user/user-forgot-password.dto';
 import { UserDeleteDto } from '../dto/user/user-delete';
-import { UserAddRolesDto } from '../dto/user/user-add-roles.dto';
-import { AuthGuard } from '../auth/auth.guard';
+import { UserUpdateRolesDto } from '../dto/user/user-update-roles.dto';
+import { AuthGuard } from '../guards/auth/auth.guard';
 import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
 import { Request } from 'express';
-import { Public } from 'src/public/public.decorator';
+import { Public } from 'src/decorators/public/public.decorator';
 import { Role } from '@prisma/client';
-import { Roles } from '../roles/roles.decorator';
+import { Roles } from '../decorators/roles/roles.decorator';
 import { UserChangeUsernameDto } from '../dto/user/user-change-username.dto';
+import { UserResetPasswordDto } from '../dto/user/user-reset-password.dto';
 
 @UseGuards(AuthGuard)
 @Controller('users')
@@ -32,15 +34,15 @@ export class UsersController {
     return this.usersService.update(req, user);
   }
 
-  @Patch('change-username')
-  async changeUsername(
+  @Patch('username')
+  async updateUsername(
     @Req() req: Request,
     @Body() user: UserChangeUsernameDto,
   ) {
     return this.usersService.changeUsername(req, user);
   }
 
-  @Patch('change-password')
+  @Patch('password')
   async changePassword(
     @Req() req: Request,
     @Body() user: UserChangePasswordDto,
@@ -48,20 +50,42 @@ export class UsersController {
     return this.usersService.changePassword(req, user);
   }
 
-  @Patch('change-email')
+  @Patch('email')
   async changeEmail(@Req() req: Request, @Body() user: UserChangeEmailDto) {
     return this.usersService.changeEmail(req, user);
   }
 
-  @Post('send-email-verification-token')
-  async getEmailVerificationToken(@Req() req: Request) {
+  @Patch('secondary-email')
+  async changeSecondaryEmail(
+    @Req() req: Request,
+    @Body() user: UserChangeEmailDto,
+  ) {
+    return this.usersService.changeSecondaryEmail(req, user);
+  }
+
+  @Post('email-verification-token')
+  async sendEmailVerificationToken(@Req() req: Request) {
     return this.usersService.sendEmailVerificationToken(req);
+  }
+
+  @Post('verify-email/:token')
+  async verifyEmail(@Param('token') token: string, @Req() req: Request) {
+    return this.usersService.verifyEmail(token, req);
   }
 
   @Public()
   @Post('forgot-password')
   async forgotPassword(@Body() user: UserForgotPasswordDto) {
     return this.usersService.forgotPassword(user);
+  }
+
+  @Public()
+  @Post('reset-password/:token')
+  async resetPassword(
+    @Param('token') token: string,
+    @Body() user: UserResetPasswordDto,
+  ) {
+    return this.usersService.resetPassword(token, user);
   }
 
   @Post('logout')
@@ -84,7 +108,13 @@ export class UsersController {
 
   @Roles(Role.ADMIN)
   @Post('add-roles')
-  async setAdmin(@Req() req: Request, @Body() user: UserAddRolesDto) {
+  async setAdmin(@Req() req: Request, @Body() user: UserUpdateRolesDto) {
     return this.usersService.addRoles(req, user);
+  }
+
+  @Roles(Role.ADMIN)
+  @Post('remove-roles')
+  async removeRoles(@Req() req: Request, @Body() user: UserUpdateRolesDto) {
+    return this.usersService.removeRoles(req, user);
   }
 }

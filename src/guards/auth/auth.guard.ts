@@ -1,23 +1,23 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../prisma/prisma.service';
 import { AuthService } from './auth.service';
 import {
   ACCESS_TOKEN,
   IS_PUBLIC_KEY,
   REQUEST_USER,
   ROLES_KEY,
-} from '../global/config';
+} from '../../global/config';
 import {
   INVALID_TOKEN,
   TOKEN_EXPIRED,
   TOKEN_INVALIDATED,
   TOKEN_NOT_FOUND,
   TOKEN_NOT_FOUND_DB,
-} from '../global/errors';
-import { LoggerService } from '../logger/logger.service';
+} from '../../global/errors';
+import { LoggerService } from '../../logger/logger.service';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
-import { ROLE_AUTH_FAILED } from '../global/messages';
+import { ROLE_AUTH_FAILED } from '../../global/messages';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -51,6 +51,8 @@ export class AuthGuard implements CanActivate {
 
     // Verify access token
     const payload = await this.authService.verifyToken(accessToken);
+
+    // Check if access token is expired
     if (payload === null) {
       // Revoke access token
       await this.prismaService.revokeAccessToken(accessToken);
@@ -72,9 +74,6 @@ export class AuthGuard implements CanActivate {
         INVALID_TOKEN,
         tokenFound ? TOKEN_INVALIDATED : TOKEN_NOT_FOUND_DB,
       );
-
-    // Update access token last used at date
-    await this.prismaService.updateAccessTokenLastUsage(accessToken);
 
     // Set payload to request object
     req[REQUEST_USER] = { ...payload.data };

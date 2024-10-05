@@ -5,28 +5,33 @@ import { UserChangeEmailDto } from '../dto/user/user-change-email.dto';
 import { UserChangePasswordDto } from '../dto/user/user-change-password.dto';
 import { UserForgotPasswordDto } from '../dto/user/user-forgot-password.dto';
 import { UserDeleteDto } from '../dto/user/user-delete';
-import { UserAddRolesDto } from '../dto/user/user-add-roles.dto';
+import { UserUpdateRolesDto } from '../dto/user/user-update-roles.dto';
 import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
 import { Request } from 'express';
-import { AuthService } from '../auth/auth.service';
+import { AuthService } from '../guards/auth/auth.service';
 import { REFRESH_TOKEN } from '../global/config';
 import {
-  USER_CHANGED_EMAIL,
-  USER_CHANGED_PASSWORD,
   USER_DELETED,
+  USER_EMAIL_CHANGED,
   USER_FORGOT_PASSWORD,
   USER_LOGOUT,
+  USER_NO_PASSWORD_CHANGE,
   USER_NOTHING_TO_UPDATE,
+  USER_PASSWORD_CHANGED,
   USER_SESSIONS_CLOSED,
   USER_UPDATED,
+  USER_USERNAME_CHANGED,
 } from '../global/messages';
 import { LoggerService } from '../logger/logger.service';
 import {
+  UNREGISTERED_USR_ROLE_ACTION,
   USER_PASSWORDS_DO_NOT_MATCH,
   USER_REGISTERED,
   USER_WRONG_CREDENTIALS,
 } from '../global/errors';
 import { UserChangeUsernameDto } from '../dto/user/user-change-username.dto';
+import { UserRoleAction } from '@prisma/client';
+import { UserResetPasswordDto } from '../dto/user/user-reset-password.dto';
 
 @Injectable()
 export class UsersService {
@@ -36,6 +41,13 @@ export class UsersService {
     private prismaService: PrismaService,
     private authService: AuthService,
   ) {}
+
+  async comparePasswords(password: string, confirmPassword: string) {
+    return (
+      password === confirmPassword ||
+      (await this.authService.comparePasswords(password, confirmPassword))
+    );
+  }
 
   async update(req: Request, user: UserUpdateDto) {
     const { username } = this.authService.getJwtDataFromRequest(req);
@@ -63,10 +75,20 @@ export class UsersService {
     // HERE, WE SHOULD SEND A TOKEN TO THE GIVEN EMAIL TO VERIFY IT
 
     return this.logger.onUserSuccess(
-      USER_CHANGED_EMAIL,
+      USER_EMAIL_CHANGED,
       username,
       HttpStatus.CREATED,
     );
+  }
+
+  async changeSecondaryEmail(req: Request, user: UserChangeEmailDto) {}
+
+  async sendEmailVerificationToken(req: Request) {
+    // HERE, WE SHOULD SEND A TOKEN TO THE GIVEN EMAIL TO VERIFY IT
+  }
+
+  async verifyEmail(token: string, req: Request) {
+    // HERE, WE SHOULD VERIFY THE TOKEN SENT TO THE EMAIL
   }
 
   async changeUsername(req: Request, { newUsername }: UserChangeUsernameDto) {
@@ -83,7 +105,7 @@ export class UsersService {
     // SEND NOTIFICATION TO EMAIL...
 
     return this.logger.onUserSuccess(
-      USER_CHANGED_EMAIL,
+      USER_USERNAME_CHANGED,
       username,
       HttpStatus.CREATED,
     );
@@ -98,9 +120,21 @@ export class UsersService {
     // Verify current password
     await this.authService.verifyUserPassword(username, currentPassword);
 
-    // Compare new password with confirm password
-    if (password !== confirmPassword)
+    // Compare password with confirm password
+    const passwordMatch = await this.comparePasswords(
+      password,
+      confirmPassword,
+    );
+    if (!passwordMatch)
       this.logger.onUserBadRequest(USER_PASSWORDS_DO_NOT_MATCH, username);
+
+    // Compare password with current password
+    const currentPasswordMatch = await this.comparePasswords(
+      currentPassword,
+      password,
+    );
+    if (currentPasswordMatch)
+      this.logger.onUserBadRequest(USER_NO_PASSWORD_CHANGE, username);
 
     // Change user password
     await this.prismaService.updatePassword(username, password);
@@ -108,7 +142,7 @@ export class UsersService {
     // SEND NOTIFICATION TO EMAIL...
 
     return this.logger.onUserSuccess(
-      USER_CHANGED_PASSWORD,
+      USER_PASSWORD_CHANGED,
       username,
       HttpStatus.CREATED,
     );
@@ -128,9 +162,7 @@ export class UsersService {
     );
   }
 
-  async sendEmailVerificationToken(req: Request) {
-    // HERE, WE SHOULD SEND A TOKEN TO THE GIVEN EMAIL TO VERIFY IT
-  }
+  async resetPassword(token: string, { username, email, password }: UserResetPasswordDto) {}
 
   async logout(req: Request) {
     const { username } = this.authService.getJwtDataFromRequest(req);
@@ -161,13 +193,21 @@ export class UsersService {
 
   async delete(
     req: Request,
-    { username: deleteUsername, password }: UserDeleteDto,
+    { username: deleteUsername, password, confirmPassword }: UserDeleteDto,
   ) {
     const { username } = this.authService.getJwtDataFromRequest(req);
 
     // Compare provided username with token username
     if (username !== deleteUsername)
       this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
+
+    // Compare password with confirm password
+    const passwordMatch = await this.comparePasswords(
+      password,
+      confirmPassword,
+    );
+    if (!passwordMatch)
+      this.logger.onUserBadRequest(USER_PASSWORDS_DO_NOT_MATCH, username);
 
     // Verify user password
     await this.authService.verifyUserPassword(username, password);
@@ -178,9 +218,10 @@ export class UsersService {
     this.logger.onUserSuccess(USER_DELETED, username);
   }
 
-  async addRoles(
+  async updateRoles(
     req: Request,
-    { username: targetUsername, roles: targetRoles }: UserAddRolesDto,
+    userRoleAction: UserRoleAction,
+    { username: targetUsername, roles: targetRoles }: UserUpdateRolesDto,
   ) {
     const { username: triggeredByUsername } =
       this.authService.getJwtDataFromRequest(req);
@@ -192,19 +233,35 @@ export class UsersService {
     const roles = this.authService.extractRoles(userRoles);
 
     // Filter out roles that are already assigned
-    const filteredRoles = targetRoles.filter((role) => !roles.includes(role));
+    let filteredRoles = [];
+
+    if (userRoleAction === UserRoleAction.ADD)
+      filteredRoles = targetRoles.filter((role) => !roles.includes(role));
+    else if (userRoleAction === UserRoleAction.REMOVE)
+      filteredRoles = targetRoles.filter((role) => roles.includes(role));
+    else this.logger.onInternalServerError(UNREGISTERED_USR_ROLE_ACTION);
 
     // Add roles to user
-    await this.prismaService.addUserRoles(
+    await this.prismaService.updateUserRoles(
       triggeredByUsername,
       targetUsername,
+      userRoleAction,
       filteredRoles,
     );
 
-    return this.logger.onUserAddedRolesSuccess(
+    return this.logger.onUserRolesUpdateSuccess(
       triggeredByUsername,
       targetUsername,
+      userRoleAction,
       filteredRoles,
     );
+  }
+
+  async addRoles(req: Request, { username, roles }: UserUpdateRolesDto) {
+    return this.updateRoles(req, UserRoleAction.ADD, { username, roles });
+  }
+
+  async removeRoles(req: Request, { username, roles }: UserUpdateRolesDto) {
+    return this.updateRoles(req, UserRoleAction.REMOVE, { username, roles });
   }
 }

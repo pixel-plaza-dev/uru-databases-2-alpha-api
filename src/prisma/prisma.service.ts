@@ -3,6 +3,7 @@ import {
   Prisma,
   PrismaClient,
   Role,
+  UserLoginAttempt,
   UserRole,
   UserRoleAction,
 } from '@prisma/client';
@@ -15,6 +16,7 @@ import {
 import { PasswordResetTokenCreate } from './types/password-reset-token';
 import { JwtRefreshTokenCreate } from './types/jwt-refresh-token-data';
 import { JwtAccessTokenCreate } from './types/jwt-access-token';
+import { UserLoginAttemptCreate } from './types/user-login-attempt';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
@@ -48,10 +50,16 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     token: string,
     select: Prisma.JwtAccessTokenSelect = { id: true },
   ) {
-    return this.jwtAccessToken.findUnique({
+    // Find access token
+    const tokenFound = await this.jwtAccessToken.findUnique({
       where: { token },
       select,
     });
+
+    // Update access token last used at date
+    if (tokenFound) await this.updateAccessTokenLastUsage(token);
+
+    return tokenFound;
   }
 
   async findUserRoles(username: string): Promise<UserRole[]> {
@@ -165,8 +173,18 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async createJwtRefreshToken(
+  async createUserLoginAttempt(
     username: string,
+    { ip, successful, userAgent }: UserLoginAttemptCreate,
+  ) {
+    return this.userLoginAttempt.create({
+      data: { ip, successful, userAgent, user: { connect: { username } } },
+    });
+  }
+
+  async createJwtRefreshTokenFromLogin(
+    username: string,
+    userLoginAttempt: UserLoginAttempt,
     {
       token: refreshToken,
       expiresAt: refreshTokenExpiresAt,
@@ -183,6 +201,36 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
           create: {
             token: refreshToken,
             expiresAt: refreshTokenExpiresAt,
+            userLoginAttempt: { connect: { id: userLoginAttempt.id } },
+            jwtAccessToken: {
+              create: { token: accessToken, expiresAt: accessTokenExpiresAt },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async createJwtRefreshTokenFromRefresh(
+    username: string,
+    parentRefreshToken: string,
+    {
+      token: refreshToken,
+      expiresAt: refreshTokenExpiresAt,
+    }: JwtRefreshTokenCreate,
+    {
+      token: accessToken,
+      expiresAt: accessTokenExpiresAt,
+    }: JwtAccessTokenCreate,
+  ) {
+    await this.user.update({
+      where: { username },
+      data: {
+        jwtRefreshTokens: {
+          create: {
+            token: refreshToken,
+            expiresAt: refreshTokenExpiresAt,
+            parentJwtRefreshToken: { connect: { token: parentRefreshToken } },
             jwtAccessToken: {
               create: { token: accessToken, expiresAt: accessTokenExpiresAt },
             },
@@ -224,9 +272,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async addUserRoles(
+  async updateUserRoles(
     triggeredByUsername: string,
     targetUsername: string,
+    userRoleAction: UserRoleAction,
     roles: Role[],
   ) {
     // Add roles to user
@@ -247,7 +296,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
       data: {
         triggeredByHistory: {
           create: roles.map((role) => ({
-            action: UserRoleAction.ADD,
+            action: userRoleAction,
             target: { connect: { username: targetUsername } },
             role,
           })),

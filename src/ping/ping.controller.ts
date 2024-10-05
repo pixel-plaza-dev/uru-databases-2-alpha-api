@@ -1,9 +1,9 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { PingService } from './ping.service';
-import { Public } from 'src/public/public.decorator';
-import { Roles } from '../roles/roles.decorator';
+import { Public } from 'src/decorators/public/public.decorator';
+import { Roles } from '../decorators/roles/roles.decorator';
 import { Role } from '@prisma/client';
-import { AuthGuard } from '../auth/auth.guard';
+import { AuthGuard } from '../guards/auth/auth.guard';
 
 @UseGuards(AuthGuard)
 @Controller('ping')

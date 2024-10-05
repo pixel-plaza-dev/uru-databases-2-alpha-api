@@ -34,6 +34,18 @@ model User {
   passwordHistory         PasswordHistory[]
   targetHistory           UserRoleHistory[]        @relation(name: "target")
   triggeredByHistory      UserRoleHistory[]        @relation(name: "triggeredBy")
+  loginAttempts           UserLoginAttempt[]
+}
+
+model UserLoginAttempt {
+  id           String           @id @default(auto()) @map("_id") @db.ObjectId
+  user         User             @relation(fields: [userId], references: [id])
+  userId       String           @db.ObjectId
+  ip           String
+  userAgent    String
+  createdAt    DateTime         @default(now())
+  successful   Boolean
+  refreshToken JwtRefreshToken?
 }
 
 model EmailVerificationToken {
@@ -87,16 +99,21 @@ model JwtAccessToken {
 }
 
 model JwtRefreshToken {
-  id               String         @id @default(auto()) @map("_id") @db.ObjectId
-  token            String         @unique
-  expiresAt        DateTime       @default(now())
-  createdAt        DateTime       @default(now())
-  usedAt           DateTime       @default(now())
-  revokedAt        DateTime?
-  jwtAccessToken   JwtAccessToken @relation(fields: [jwtAccessTokenId], references: [id])
-  jwtAccessTokenId String         @unique @db.ObjectId
-  user             User           @relation(fields: [userId], references: [id])
-  userId           String         @db.ObjectId
+  id                      String            @id @default(auto()) @map("_id") @db.ObjectId
+  token                   String            @unique
+  expiresAt               DateTime          @default(now())
+  createdAt               DateTime          @default(now())
+  usedAt                  DateTime          @default(now())
+  revokedAt               DateTime?
+  jwtAccessToken          JwtAccessToken    @relation(fields: [jwtAccessTokenId], references: [id])
+  jwtAccessTokenId        String            @unique @db.ObjectId
+  user                    User              @relation(fields: [userId], references: [id])
+  userId                  String            @db.ObjectId
+  userLoginAttempt        UserLoginAttempt? @relation(fields: [userLoginAttemptId], references: [id])
+  userLoginAttemptId      String?           @unique @db.ObjectId
+  parentJwtRefreshToken   JwtRefreshToken?  @relation(name: "parentJwtRefreshToken", fields: [parentJwtRefreshTokenId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parentJwtRefreshTokenId String?           @unique @db.ObjectId
+  childJwtRefreshToken    JwtRefreshToken?  @relation(name: "parentJwtRefreshToken")
 }
 
 enum Role {
@@ -117,6 +134,7 @@ model UserRole {
 enum UserRoleAction {
   ADD
   REMOVE
+  SUPER_ADMIN
 }
 
 model UserRoleHistory {

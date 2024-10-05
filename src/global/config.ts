@@ -10,6 +10,11 @@ export const BCRYPT_SALT_ROUNDS = parseInt(process.env.BCRYPT_SALT_ROUNDS);
 // JWT Secret
 export const JWT_SECRET = process.env.JWT_SECRET;
 
+// Expiration
+export interface Expiration {
+  readonly expiresIn: number;
+}
+
 // Tokens Options
 export interface JwtTokenOptions {
   readonly secure: boolean;
@@ -24,10 +29,6 @@ export const TOKEN_OPTIONS_DEFAULT: JwtTokenOptions = {
 } as const;
 
 // Tokens
-export interface Expiration {
-  readonly expiresIn: number;
-}
-
 export interface JwtTokenConfig extends Expiration {
   readonly name: string;
   readonly options: JwtTokenOptions;
@@ -65,6 +66,9 @@ export const PASSWORD_RESET: Expiration = {
 
 // Request added properties
 export const REQUEST_USER = 'user';
+
+// Request headers
+export const USER_AGENT = 'user-agent';
 
 // Decorators
 export const IS_PUBLIC_KEY = 'isPublic';
