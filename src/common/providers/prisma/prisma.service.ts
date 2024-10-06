@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import {
   Prisma,
   PrismaClient,
@@ -7,7 +12,7 @@ import {
   UserRole,
   UserRoleAction,
 } from '@prisma/client';
-import { awaitConcurrently } from '../utils/execute-concurrently';
+import { awaitConcurrently } from '../../utils/execute-concurrently';
 import { UserCreate, UserUpdate } from './types/user';
 import {
   EmailVerificationTokenCreate,
@@ -17,11 +22,25 @@ import { PasswordResetTokenCreate } from './types/password-reset-token';
 import { JwtRefreshTokenCreate } from './types/jwt-refresh-token-data';
 import { JwtAccessTokenCreate } from './types/jwt-access-token';
 import { UserLoginAttemptCreate } from './types/user-login-attempt';
+import { PRISMA } from '../../constants/prisma';
 
 @Injectable()
-export class PrismaService extends PrismaClient implements OnModuleInit {
+export class PrismaService
+  extends PrismaClient
+  implements OnModuleInit, OnModuleDestroy
+{
+  private readonly logger = new Logger(PrismaService.name);
+
   async onModuleInit() {
+    this.logger.warn(PRISMA.CONNECTING);
     await this.$connect();
+    this.logger.log(PRISMA.CONNECTED);
+  }
+
+  async onModuleDestroy() {
+    this.logger.warn(PRISMA.DISCONNECTING);
+    await this.$disconnect();
+    this.logger.log(PRISMA.DISCONNECTED);
   }
 
   async findUser(
@@ -57,7 +76,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
 
     // Update access token last used at date
-    if (tokenFound) await this.updateAccessTokenLastUsage(token);
+    if (tokenFound) await this.updateJwtAccessTokenLastUsage(token);
 
     return tokenFound;
   }
@@ -68,18 +87,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
   }
 
   async findUserEmailVerificationToken(
-    username: string,
-    email: string,
-    select: Prisma.EmailVerificationTokenSelect = { id: true, uuid: true },
+    uuid: string,
+    select: Prisma.EmailVerificationTokenSelect = { id: true },
   ) {
-    return this.user.findUnique({
-      where: { username },
-      select: {
-        emailVerificationTokens: {
-          where: { email, expiresAt: { gt: new Date() } },
-          select,
-        },
-      },
+    return this.emailVerificationToken.findUnique({
+      where: { uuid },
+      select,
     });
   }
 
@@ -96,24 +109,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
         },
       },
     });
-  }
-
-  async isRefreshTokenRevoked(token: string) {
-    const { revokedAt } = await this.jwtRefreshToken.findUnique({
-      where: { token },
-      select: { revokedAt: true },
-    });
-
-    return revokedAt !== null;
-  }
-
-  async isAccessTokenRevoked(token: string) {
-    const { revokedAt } = await this.jwtAccessToken.findUnique({
-      where: { token },
-      select: { revokedAt: true },
-    });
-
-    return revokedAt !== null;
   }
 
   async createUser(
@@ -249,7 +244,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async updatePassword(username: string, password: string) {
     // Revoke all refresh tokens and its access tokens
-    await this.revokeRefreshTokens(username);
+    await this.revokeJwtRefreshTokens(username);
 
     // Update user password and add it to history
     await this.user.update({
@@ -260,7 +255,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async updateUsername(username: string, newUsername: string) {
     // Revoke all refresh tokens and its access tokens
-    await this.revokeRefreshTokens(username);
+    await this.revokeJwtRefreshTokens(username);
 
     // Update username and add it to history
     await this.user.update({
@@ -307,7 +302,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     await awaitConcurrently(updateUser, updateRoleHistory);
   }
 
-  async updateAccessTokenLastUsage(token: string) {
+  async updateJwtAccessTokenLastUsage(token: string) {
     await this.jwtAccessToken.update({
       where: { token },
       data: {
@@ -316,23 +311,26 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     });
   }
 
-  async setRefreshTokenAsUsed(token: string) {
+  async setJwtRefreshTokenAsUsed(token: string) {
+    const currentDateTime = new Date();
+
     await this.jwtRefreshToken.update({
       where: { token },
       data: {
-        usedAt: new Date(),
+        usedAt: currentDateTime,
+        revokedAt: currentDateTime,
       },
     });
   }
 
-  async revokeAccessToken(token: string) {
+  async revokeJwtAccessToken(token: string) {
     await this.jwtAccessToken.update({
       where: { token },
       data: { revokedAt: new Date() },
     });
   }
 
-  async revokeRefreshToken(refreshToken: string) {
+  async revokeJwtRefreshToken(refreshToken: string) {
     const revokedAt = new Date();
 
     // Revoke refresh token
@@ -354,7 +352,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
     await awaitConcurrently(revokeRefreshToken, revokeAccessTokens);
   }
 
-  async revokeRefreshTokens(username: string) {
+  async revokeJwtRefreshTokens(username: string) {
     const revokedAt = new Date();
 
     // Revoke all refresh tokens
@@ -414,7 +412,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit {
 
   async deleteUser(username: string) {
     // Revoke all refresh tokens and its access token
-    await this.revokeRefreshTokens(username);
+    await this.revokeJwtRefreshTokens(username);
 
     // Delete user
     await this.user.update({

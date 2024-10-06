@@ -9,20 +9,20 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
-import { UserUpdateDto } from '../dto/user/user-update.dto';
-import { UserChangePasswordDto } from '../dto/user/user-change-password.dto';
-import { UserChangeEmailDto } from '../dto/user/user-change-email.dto';
-import { UserForgotPasswordDto } from '../dto/user/user-forgot-password.dto';
-import { UserDeleteDto } from '../dto/user/user-delete';
-import { UserUpdateRolesDto } from '../dto/user/user-update-roles.dto';
-import { AuthGuard } from '../guards/auth/auth.guard';
-import { UserCloseAllSessionsDto } from '../dto/user/user-close-all-sessions';
+import { UserUpdateDto } from '../common/dto/user/user-update.dto';
+import { UserChangePasswordDto } from '../common/dto/user/user-change-password.dto';
+import { UserChangeEmailDto } from '../common/dto/user/user-change-email.dto';
+import { UserForgotPasswordDto } from '../common/dto/user/user-forgot-password.dto';
+import { UserDeleteDto } from '../common/dto/user/user-delete';
+import { UserUpdateRolesDto } from '../common/dto/user/user-update-roles.dto';
+import { AuthGuard } from '../common/guards/auth/auth.guard';
+import { UserCloseAllSessionsDto } from '../common/dto/user/user-close-all-sessions';
 import { Request } from 'express';
-import { Public } from 'src/decorators/public/public.decorator';
+import { Public } from 'src/common/decorators/public.decorator';
 import { Role } from '@prisma/client';
-import { Roles } from '../decorators/roles/roles.decorator';
-import { UserChangeUsernameDto } from '../dto/user/user-change-username.dto';
-import { UserResetPasswordDto } from '../dto/user/user-reset-password.dto';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserChangeUsernameDto } from '../common/dto/user/user-change-username.dto';
+import { UserResetPasswordDto } from '../common/dto/user/user-reset-password.dto';
 
 @UseGuards(AuthGuard)
 @Controller('users')
@@ -63,7 +63,7 @@ export class UsersController {
     return this.usersService.changeSecondaryEmail(req, user);
   }
 
-  @Post('email-verification-token')
+  @Post('verify-email')
   async sendEmailVerificationToken(@Req() req: Request) {
     return this.usersService.sendEmailVerificationToken(req);
   }
@@ -112,7 +112,7 @@ export class UsersController {
     return this.usersService.addRoles(req, user);
   }
 
-  @Roles(Role.ADMIN)
+  @Roles(Role.SUPER_ADMIN)
   @Post('remove-roles')
   async removeRoles(@Req() req: Request, @Body() user: UserUpdateRolesDto) {
     return this.usersService.removeRoles(req, user);

@@ -7,35 +7,36 @@ import {
   Scope,
   UnauthorizedException,
 } from '@nestjs/common';
-import {
-  AUTH_FAILED,
-  AUTH_SUCCESS,
-  ROLE_AUTH_SUCCESS,
-  USER_ADDED_ROLES,
-  USER_REMOVED_ROLES,
-} from '../global/messages';
-import { INTERNAL_SERVER_ERROR } from '../global/errors';
+import { PONG } from '../../constants/messages';
+import { INTERNAL_SERVER_ERROR } from '../../constants/errors';
 import { Role, UserRoleAction } from '@prisma/client';
+import { AUTH } from '../../constants/auth';
+import { USER_ROLE } from '../../constants/user-role';
 
 @Injectable({ scope: Scope.TRANSIENT })
 export class LoggerService extends Logger {
   onUnauthorized(message: string, errorMessage?: string) {
-    super.warn(`${AUTH_FAILED}: ${message ?? errorMessage}`);
+    super.warn(`${AUTH.FAILED}: ${message ?? errorMessage}`);
     throw new UnauthorizedException(message);
   }
 
   onAuthorized(username: string, roles: Role[]) {
-    super.log(`${AUTH_SUCCESS}: ${username} (${roles.join(', ')})`);
+    super.log(`${AUTH.SUCCESS}: ${username} (${roles.join(', ')})`);
     return true;
   }
 
   onAuthorizedRole(username: string, role: Role) {
-    super.log(`${ROLE_AUTH_SUCCESS}: ${username} (${role})`);
+    super.log(`${AUTH.ROLE_SUCCESS}: ${username} (${role})`);
     return true;
   }
 
+  onUnauthorizedRole(username: string, roles: Role[]) {
+    super.warn(`${AUTH.ROLE_FAILED}: ${username} (${roles.join(', ')})`);
+    throw new UnauthorizedException(AUTH.ROLE_FAILED);
+  }
+
   onUserBadRequest(message: string, username: string) {
-    super.warn(`${message}: ${username}`);
+    super.warn(`${message} (${username})`);
     throw new BadRequestException(message);
   }
 
@@ -46,11 +47,11 @@ export class LoggerService extends Logger {
     throw new InternalServerErrorException(INTERNAL_SERVER_ERROR);
   }
 
-  onPingSuccess(message: string) {
-    super.log(message);
+  onPingSuccess() {
+    super.log(PONG);
     return {
       statusCode: HttpStatus.OK,
-      message,
+      PONG,
     };
   }
 
@@ -74,13 +75,19 @@ export class LoggerService extends Logger {
   ) {
     const message =
       userRoleAction === UserRoleAction.ADD
-        ? USER_ADDED_ROLES
-        : USER_REMOVED_ROLES;
+        ? USER_ROLE.ADDED
+        : USER_ROLE.REMOVED;
 
-    super.log(`${message}: ${triggeredByUsername}  ${roles.join(', ')}`);
+    super.log(
+      `${message}: ${triggeredByUsername} -> ${targetUsername} (${roles.join(', ')})`,
+    );
     return {
       statusCode: HttpStatus.CREATED,
-      message: USER_ADDED_ROLES,
+      message,
     };
+  }
+
+  onUnhandledError(exception: unknown) {
+    super.error(exception);
   }
 }

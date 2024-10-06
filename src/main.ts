@@ -10,7 +10,12 @@ import {
 } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
-import { SERVER_PORT } from './global/config';
+import { SERVER_PORT } from './config/server';
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

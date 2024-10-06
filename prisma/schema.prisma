@@ -119,6 +119,7 @@ model JwtRefreshToken {
 enum Role {
   USER
   ADMIN
+  SUPER_ADMIN
 }
 
 model UserRole {
@@ -134,7 +135,6 @@ model UserRole {
 enum UserRoleAction {
   ADD
   REMOVE
-  SUPER_ADMIN
 }
 
 model UserRoleHistory {

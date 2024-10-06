@@ -1,44 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../../providers/prisma/prisma.service';
 import { UserAuthLoginDto } from '../../dto/user/auth/user-auth-login.dto';
 import * as bcrypt from 'bcrypt';
 import { UserAuthSignupDto } from '../../dto/user/auth/user-auth-signup.dto';
-import {
-  ACCESS_TOKEN,
-  BCRYPT_SALT_ROUNDS,
-  EMAIL_VERIFICATION,
-  Expiration,
-  JWT_SECRET,
-  JwtTokenConfig,
-  PASSWORD_RESET,
-  REFRESH_TOKEN,
-  REQUEST_USER,
-  USER_AGENT,
-} from '../../global/config';
-import {
-  TOKEN_REFRESH_SUCCESS,
-  USER_LOGIN,
-  USER_SIGNUP,
-} from '../../global/messages';
-import {
-  BCYPT_ERROR,
-  INVALID_TOKEN,
-  JWT_TOKEN_EXPIRED_ERROR,
-  TOKEN_EXPIRED,
-  TOKEN_INVALIDATED,
-  TOKEN_NOT_FOUND,
-  TOKEN_NOT_FOUND_DB,
-  USER_PASSWORDS_DO_NOT_MATCH,
-  USER_REGISTERED,
-  USER_WRONG_CREDENTIALS,
-} from '../../global/errors';
-import { LoggerService } from '../../logger/logger.service';
+import { BCRYPT_SALT_ROUNDS, JWT_SECRET } from '../../../config/secrets';
+import { BCYPT_ERROR, JWT_TOKEN_EXPIRED_ERROR } from '../../constants/errors';
+import { LoggerService } from '../../providers/logger/logger.service';
 import { Prisma, Role, UserLoginAttempt, UserRole } from '@prisma/client';
 import { awaitConcurrently } from '../../utils/execute-concurrently';
-import { JwtRefreshTokenCreate } from '../../prisma/types/jwt-refresh-token-data';
-import { JwtAccessTokenCreate } from '../../prisma/types/jwt-access-token';
+import { JwtRefreshTokenCreate } from '../../providers/prisma/types/jwt-refresh-token-data';
+import { JwtAccessTokenCreate } from '../../providers/prisma/types/jwt-access-token';
+import { Expiration } from '../../../config/token';
+import {
+  ACCESS_TOKEN,
+  JwtTokenConfig,
+  REFRESH_TOKEN,
+} from '../../../config/jwt-token';
+import { REQUEST_USER, USER_AGENT } from '../../constants/request';
+import { PASSWORD_RESET } from '../../../config/password-reset-token';
+import { EMAIL_VERIFICATION } from '../../../config/email-verification-token';
+import { USER } from '../../constants/user';
+import { TOKEN } from '../../constants/token';
+import { PRISMA } from '../../constants/prisma';
+import { JWT_TOKEN } from '../../constants/jwt-token';
 
 export interface JwtPayload {
   data: JwtPayloadData;
@@ -231,7 +217,7 @@ export class AuthService {
     } catch (err) {
       // Check if token is expired
       if (err.name !== JWT_TOKEN_EXPIRED_ERROR)
-        this.logger.onUnauthorized(INVALID_TOKEN, err.name);
+        this.logger.onUnauthorized(TOKEN.INVALID, err.name);
     }
     return null;
   }
@@ -243,13 +229,9 @@ export class AuthService {
     const emailVerificationTokenExpiresAt =
       this.getExpiration(EMAIL_VERIFICATION);
 
-    // Check if user exists
-    const userExists = await this.prismaService.findUser(username);
-    if (userExists) this.logger.onUserBadRequest(USER_REGISTERED, username);
-
     // Compare passwords
     if (password !== confirmPassword)
-      this.logger.onUserBadRequest(USER_PASSWORDS_DO_NOT_MATCH, username);
+      this.logger.onUserBadRequest(USER.PASSWORDS_DO_NOT_MATCH, username);
 
     // Hash password
     bcrypt.hash(
@@ -258,15 +240,23 @@ export class AuthService {
       async (err: any, hash: string) => {
         if (err) this.logger.onInternalServerError(BCYPT_ERROR, err.name);
 
-        // Create user
-        await this.prismaService.createUser(
-          { ...user, password: hash },
-          { expiresAt: emailVerificationTokenExpiresAt },
-        );
+        try {
+          // Create user
+          await this.prismaService.createUser(
+            { ...user, password: hash },
+            { expiresAt: emailVerificationTokenExpiresAt },
+          );
+        } catch (error) {
+          // Check if user exists
+          if (error.code === PRISMA.UNIQUE_CONSTRAINT_FAILED)
+            this.logger.onUserBadRequest(USER.REGISTERED, username);
+
+          this.logger.onInternalServerError(error.message);
+        }
       },
     );
 
-    return this.logger.onUserSuccess(USER_SIGNUP, username);
+    return this.logger.onUserSuccess(USER.SIGNUP, username);
   }
 
   async login(req: Request, res: Response, user: UserAuthLoginDto) {
@@ -280,12 +270,12 @@ export class AuthService {
     );
 
     // Check if user exists
-    if (!userFound) this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
+    if (!userFound) this.logger.onUnauthorized(USER.WRONG_CREDENTIALS);
 
     // Get user agent and IP address
     const userAgent = this.getUserAgentFromRequest(req);
     const ip = this.getIpAddressFromRequest(req);
-    const successful = !userFound.deleted;
+    const successful = match && !userFound.deleted;
 
     // Add login attempt
     const userLoginAttempt = await this.prismaService.createUserLoginAttempt(
@@ -295,31 +285,35 @@ export class AuthService {
 
     // Check if user is not deleted or password is incorrect
     if (!match || userFound.deleted)
-      this.logger.onUnauthorized(USER_WRONG_CREDENTIALS);
+      this.logger.onUnauthorized(USER.WRONG_CREDENTIALS);
 
-    // Create JWT tokens
-    await this.createJwtTokensCookiesFromLogin(
-      res,
-      username,
-      userFound.roles,
-      userLoginAttempt,
-    );
+    try {
+      // Create JWT tokens
+      await this.createJwtTokensCookiesFromLogin(
+        res,
+        username,
+        userFound.roles,
+        userLoginAttempt,
+      );
+    } catch (error) {
+      this.logger.onInternalServerError(error.message);
+    }
 
-    return this.logger.onUserSuccess(USER_LOGIN, username);
+    return this.logger.onUserSuccess(USER.LOGIN, username);
   }
 
   async refresh(req: Request, res: Response) {
     // Extract refresh token
     const refreshToken = this.extractTokenFromCookies(req, REFRESH_TOKEN);
-    if (!refreshToken) this.logger.onUnauthorized(TOKEN_NOT_FOUND);
+    if (!refreshToken) this.logger.onUnauthorized(TOKEN.MISSING);
 
     // Verify refresh token
     const payload = await this.verifyToken(refreshToken);
     if (payload === null) {
       // Revoke refresh token
-      await this.prismaService.revokeRefreshToken(refreshToken);
+      await this.prismaService.revokeJwtRefreshToken(refreshToken);
 
-      this.logger.onUnauthorized(TOKEN_EXPIRED);
+      this.logger.onUnauthorized(TOKEN.EXPIRED);
     }
 
     // Get username from payload
@@ -328,42 +322,40 @@ export class AuthService {
     // Get updated roles
     const userRoles = await this.prismaService.findUserRoles(username);
 
-    // Check if refresh token was found in database and is valid
     const tokenFound = await this.prismaService.findJwtRefreshToken(
       refreshToken,
       {
         revokedAt: true,
       },
     );
-    if (!tokenFound || tokenFound.revokedAt !== null)
-      this.logger.onUnauthorized(
-        INVALID_TOKEN,
-        tokenFound ? TOKEN_INVALIDATED : TOKEN_NOT_FOUND_DB,
+
+    // Check if refresh token was found in database
+    if (!tokenFound)
+      this.logger.onUnauthorized(TOKEN.INVALID, TOKEN.NOT_FOUND_DB);
+
+    // Check if refresh token is not revoked
+    if (tokenFound.revokedAt !== null)
+      this.logger.onUnauthorized(TOKEN.REVOKED);
+
+    // Set refresh token as used and revoke it
+    const setRefreshTokenAsUsed =
+      this.prismaService.setJwtRefreshTokenAsUsed(refreshToken);
+
+    try {
+      // Create JWT tokens
+      const createJwtTokens = this.createJwtTokensCookiesFromRefresh(
+        res,
+        username,
+        userRoles,
+        refreshToken,
       );
 
-    // Set refresh token as used
-    const setRefreshTokenAsUsed =
-      this.prismaService.setRefreshTokenAsUsed(refreshToken);
+      await awaitConcurrently(setRefreshTokenAsUsed, createJwtTokens);
+    } catch (error) {
+      this.logger.onInternalServerError(error.message);
+    }
 
-    // Revoke refresh token
-    const revokeRefreshToken =
-      this.prismaService.revokeRefreshToken(refreshToken);
-
-    // Create JWT tokens
-    const createJwtTokens = this.createJwtTokensCookiesFromRefresh(
-      res,
-      username,
-      userRoles,
-      refreshToken,
-    );
-
-    await awaitConcurrently(
-      setRefreshTokenAsUsed,
-      revokeRefreshToken,
-      createJwtTokens,
-    );
-
-    return this.logger.onUserSuccess(TOKEN_REFRESH_SUCCESS, username);
+    return this.logger.onUserSuccess(JWT_TOKEN.REFRESH_SUCCESS, username);
   }
 
   async createEmailVerificationToken(

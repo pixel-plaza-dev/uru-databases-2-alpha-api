@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { LoggerService } from '../logger/logger.service';
-import { PONG } from '../global/messages';
+import { LoggerService } from '../common/providers/logger/logger.service';
 
 @Injectable()
 export class PingService {
@@ -9,6 +8,6 @@ export class PingService {
   constructor() {}
 
   ping() {
-    return this.logger.onPingSuccess(PONG);
+    return this.logger.onPingSuccess();
   }
 }
