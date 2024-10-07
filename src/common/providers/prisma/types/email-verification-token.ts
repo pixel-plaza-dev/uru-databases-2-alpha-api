@@ -7,5 +7,5 @@ export type EmailVerificationTokenSignup = Pick<
 
 export type EmailVerificationTokenCreate = Pick<
   EmailVerificationToken,
-  'expiresAt' | 'email'
+  'expiresAt'
 >;

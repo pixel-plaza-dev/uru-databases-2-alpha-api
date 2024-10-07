@@ -1,6 +1,4 @@
-import { PasswordResetToken } from '@prisma/client';
+import { PasswordResetToken, UserEmail } from '@prisma/client';
 
-export type PasswordResetTokenCreate = Pick<
-  PasswordResetToken,
-  'email' | 'expiresAt'
->;
+export type PasswordResetTokenCreate = Pick<PasswordResetToken, 'expiresAt'> &
+  Pick<UserEmail, 'email'>;

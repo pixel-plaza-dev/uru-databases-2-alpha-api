@@ -17,6 +17,8 @@ export const USER = {
   REGISTERED: 'Username already registered',
   WRONG_CREDENTIALS: 'Wrong email or password',
   INVALID_PASSWORD: 'Invalid password',
+  INVALID_EMAIL: 'Invalid email',
   NO_PASSWORD_CHANGE: 'No password change',
+  NO_EMAIL_CHANGE: 'No email change',
   PASSWORDS_DO_NOT_MATCH: 'Passwords do not match',
 } as const;

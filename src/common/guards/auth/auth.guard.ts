@@ -61,7 +61,7 @@ export class AuthGuard implements CanActivate {
     if (!tokenFound)
       this.logger.onUnauthorized(TOKEN.INVALID, TOKEN.NOT_FOUND_DB);
 
-    // Check if access token is not revoked
+    // Check if access token was revoked
     if (tokenFound.revokedAt !== null)
       this.logger.onUnauthorized(TOKEN.REVOKED);
 

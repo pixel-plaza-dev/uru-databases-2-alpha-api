@@ -23,6 +23,7 @@ import { Role } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserChangeUsernameDto } from '../common/dto/user/user-change-username.dto';
 import { UserResetPasswordDto } from '../common/dto/user/user-reset-password.dto';
+import { UserSendEmailVerificationTokenDto } from '../common/dto/user/user-send-email-verification-token.dto';
 
 @UseGuards(AuthGuard)
 @Controller('users')
@@ -55,22 +56,17 @@ export class UsersController {
     return this.usersService.changeEmail(req, user);
   }
 
-  @Patch('secondary-email')
-  async changeSecondaryEmail(
-    @Req() req: Request,
-    @Body() user: UserChangeEmailDto,
-  ) {
-    return this.usersService.changeSecondaryEmail(req, user);
-  }
-
   @Post('verify-email')
-  async sendEmailVerificationToken(@Req() req: Request) {
-    return this.usersService.sendEmailVerificationToken(req);
+  async sendEmailVerificationToken(
+    @Req() req: Request,
+    @Body() user: UserSendEmailVerificationTokenDto,
+  ) {
+    return this.usersService.sendEmailVerificationToken(req, user);
   }
 
-  @Post('verify-email/:token')
-  async verifyEmail(@Param('token') token: string, @Req() req: Request) {
-    return this.usersService.verifyEmail(token, req);
+  @Post('verify-email/:uuid')
+  async verifyEmail(@Param('uuid') uuid: string) {
+    return this.usersService.verifyEmail(uuid);
   }
 
   @Public()
@@ -80,12 +76,12 @@ export class UsersController {
   }
 
   @Public()
-  @Post('reset-password/:token')
+  @Post('reset-password/:uuid')
   async resetPassword(
-    @Param('token') token: string,
+    @Param('uuid') uuid: string,
     @Body() user: UserResetPasswordDto,
   ) {
-    return this.usersService.resetPassword(token, user);
+    return this.usersService.resetPassword(uuid, user);
   }
 
   @Post('logout')

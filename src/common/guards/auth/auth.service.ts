@@ -25,6 +25,8 @@ import { USER } from '../../constants/user';
 import { TOKEN } from '../../constants/token';
 import { PRISMA } from '../../constants/prisma';
 import { JWT_TOKEN } from '../../constants/jwt-token';
+import { EMAIL_VERIFICATION_TOKEN } from '../../constants/email-verification-token';
+import { PASSWORD_RESET_TOKEN } from '../../constants/password-reset-token';
 
 export interface JwtPayload {
   data: JwtPayloadData;
@@ -326,6 +328,7 @@ export class AuthService {
       refreshToken,
       {
         revokedAt: true,
+        usedAt: true,
       },
     );
 
@@ -333,15 +336,19 @@ export class AuthService {
     if (!tokenFound)
       this.logger.onUnauthorized(TOKEN.INVALID, TOKEN.NOT_FOUND_DB);
 
-    // Check if refresh token is not revoked
+    // Check if refresh token was revoked
     if (tokenFound.revokedAt !== null)
       this.logger.onUnauthorized(TOKEN.REVOKED);
 
-    // Set refresh token as used and revoke it
-    const setRefreshTokenAsUsed =
-      this.prismaService.setJwtRefreshTokenAsUsed(refreshToken);
+    // Check if refresh token was used
+    if (tokenFound.usedAt !== null)
+      this.logger.onUnauthorized(TOKEN.INVALID, TOKEN.USED);
 
     try {
+      // Set refresh token as used and revoke it
+      const setRefreshTokenAsUsed =
+        this.prismaService.setJwtRefreshTokenAsUsed(refreshToken);
+
       // Create JWT tokens
       const createJwtTokens = this.createJwtTokensCookiesFromRefresh(
         res,
@@ -366,13 +373,28 @@ export class AuthService {
     const expiresAt = this.getExpiration(EMAIL_VERIFICATION);
 
     // Add email verification token
-    const emailVerificationToken =
-      await this.prismaService.createEmailVerificationToken(username, {
-        email,
-        expiresAt,
-      });
+    try {
+      const emailVerificationToken =
+        await this.prismaService.createEmailVerificationToken(
+          username,
+          email,
+          { expiresAt },
+          { uuid: true },
+        );
 
-    return emailVerificationToken.uuid;
+      if (!emailVerificationToken)
+        this.logger.onUserBadRequest(
+          EMAIL_VERIFICATION_TOKEN.FAILED_TO_CREATE,
+          username,
+        );
+
+      return emailVerificationToken.uuid;
+    } catch {
+      this.logger.onUserBadRequest(
+        EMAIL_VERIFICATION_TOKEN.FAILED_TO_CREATE,
+        username,
+      );
+    }
   }
 
   async createPasswordResetToken(
@@ -383,12 +405,26 @@ export class AuthService {
     const expiresAt = this.getExpiration(PASSWORD_RESET);
 
     // Add password reset token
-    const passwordResetToken =
-      await this.prismaService.createPasswordResetToken(username, {
-        email,
-        expiresAt,
-      });
+    try {
+      const passwordResetToken =
+        await this.prismaService.createPasswordResetToken(
+          username,
+          { email, expiresAt },
+          { uuid: true },
+        );
 
-    return passwordResetToken.uuid;
+      if (!passwordResetToken)
+        this.logger.onUserBadRequest(
+          PASSWORD_RESET_TOKEN.FAILED_TO_CREATE,
+          username,
+        );
+
+      return passwordResetToken.uuid;
+    } catch {
+      this.logger.onUserBadRequest(
+        PASSWORD_RESET_TOKEN.FAILED_TO_CREATE,
+        username,
+      );
+    }
   }
 }

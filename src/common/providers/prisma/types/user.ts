@@ -1,4 +1,4 @@
-import { User } from '@prisma/client';
+import { User, UserEmail } from '@prisma/client';
 
 export type UserCreatePartial = Partial<
   Pick<User, 'address' | 'phone' | 'birthDate'>
@@ -6,8 +6,9 @@ export type UserCreatePartial = Partial<
 
 export type UserCreateRequired = Pick<
   User,
-  'email' | 'username' | 'password' | 'firstName' | 'lastName'
->;
+  'username' | 'password' | 'firstName' | 'lastName'
+> &
+  Pick<UserEmail, 'email'>;
 
 export type UserCreate = UserCreateRequired & UserCreatePartial;
 

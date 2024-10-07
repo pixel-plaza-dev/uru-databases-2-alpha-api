@@ -35,8 +35,9 @@ export class LoggerService extends Logger {
     throw new UnauthorizedException(AUTH.ROLE_FAILED);
   }
 
-  onUserBadRequest(message: string, username: string) {
-    super.warn(`${message} (${username})`);
+  onUserBadRequest(message: string, username?: string) {
+    if (username) super.warn(`${message} (${username})`);
+    else super.warn(message);
     throw new BadRequestException(message);
   }
 

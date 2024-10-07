@@ -6,4 +6,5 @@ export const TOKEN = {
   MISSING: 'Token missing',
   REVOKED: 'Token revoked',
   NOT_FOUND_DB: 'Token not found in database',
+  USED: 'Token already used',
 } as const;

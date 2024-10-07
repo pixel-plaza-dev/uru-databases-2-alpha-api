@@ -15,26 +15,23 @@ datasource db {
 }
 
 model User {
-  id                      String                   @id @default(auto()) @map("_id") @db.ObjectId
-  email                   String
-  secondaryEmail          String?
-  username                String                   @unique
-  firstName               String
-  lastName                String
-  password                String
-  address                 String?
-  phone                   String?
-  birthDate               DateTime?
-  deleted                 Boolean                  @default(false)
-  jwtRefreshTokens        JwtRefreshToken[]
-  roles                   UserRole[]
-  usernameHistory         UsernameHistory[]
-  emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens     PasswordResetToken[]
-  passwordHistory         PasswordHistory[]
-  targetHistory           UserRoleHistory[]        @relation(name: "target")
-  triggeredByHistory      UserRoleHistory[]        @relation(name: "triggeredBy")
-  loginAttempts           UserLoginAttempt[]
+  id                 String             @id @default(auto()) @map("_id") @db.ObjectId
+  emails             UserEmail[]
+  username           String             @unique
+  firstName          String
+  lastName           String
+  password           String
+  address            String?
+  phone              String?
+  birthDate          DateTime?
+  deleted            Boolean            @default(false)
+  jwtRefreshTokens   JwtRefreshToken[]
+  roles              UserRole[]
+  usernameHistory    UsernameHistory[]
+  passwordHistory    PasswordHistory[]
+  targetHistory      UserRoleHistory[]  @relation(name: "target")
+  triggeredByHistory UserRoleHistory[]  @relation(name: "triggeredBy")
+  loginAttempts      UserLoginAttempt[]
 }
 
 model UserLoginAttempt {
@@ -48,28 +45,38 @@ model UserLoginAttempt {
   refreshToken JwtRefreshToken?
 }
 
+model UserEmail {
+  id                      String                   @id @default(auto()) @map("_id") @db.ObjectId
+  email                   String                   @unique
+  assignedAt              DateTime                 @default(now())
+  verifiedAt              DateTime?
+  isActive                Boolean                  @default(true)
+  user                    User                     @relation(fields: [userId], references: [id])
+  userId                  String                   @db.ObjectId
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+}
+
 model EmailVerificationToken {
-  id         String    @id @default(auto()) @map("_id") @db.ObjectId
-  uuid       String    @unique @default(uuid()) @map("_uuid")
-  email      String
-  expiresAt  DateTime  @default(now())
-  createdAt  DateTime  @default(now())
-  revokedAt  DateTime?
-  verifiedAt DateTime?
-  user       User      @relation(fields: [userId], references: [id])
-  userId     String    @db.ObjectId
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  uuid        String    @unique @default(uuid()) @map("_uuid")
+  expiresAt   DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  verifiedAt  DateTime?
+  userEmail   UserEmail @relation(fields: [userEmailId], references: [id])
+  userEmailId String    @db.ObjectId
 }
 
 model PasswordResetToken {
-  id        String    @id @default(auto()) @map("_id") @db.ObjectId
-  uuid      String    @unique @default(uuid()) @map("_uuid")
-  email     String
-  expiresAt DateTime  @default(now())
-  createdAt DateTime  @default(now())
-  revokedAt DateTime?
-  usedAt    DateTime?
-  user      User      @relation(fields: [userId], references: [id])
-  userId    String    @db.ObjectId
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  uuid        String    @unique @default(uuid()) @map("_uuid")
+  expiresAt   DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+  usedAt      DateTime?
+  userEmail   UserEmail @relation(fields: [userEmailId], references: [id])
+  userEmailId String    @db.ObjectId
 }
 
 model UsernameHistory {

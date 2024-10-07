@@ -3,7 +3,7 @@ import { ApiProperty, PickType } from '@nestjs/swagger';
 import { UserDto } from './user.dto';
 
 export class UserChangeEmailDto extends PickType(UserDto, [
-  'username',
+  'email',
 ] as const) {
   @IsEmail()
   @IsNotEmpty()

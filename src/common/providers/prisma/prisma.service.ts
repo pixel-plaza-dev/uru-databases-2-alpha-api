@@ -55,6 +55,30 @@ export class PrismaService
     });
   }
 
+  async findUserById(
+    id: string,
+    select: Prisma.UserSelect = {
+      id: true,
+    },
+  ) {
+    return this.user.findUnique({
+      where: { id },
+      select,
+    });
+  }
+
+  async findUserEmails(
+    username: string,
+    select: Prisma.UserEmailSelect = {
+      email: true,
+    },
+  ) {
+    return this.userEmail.findMany({
+      where: { user: { username } },
+      select,
+    });
+  }
+
   async findJwtRefreshToken(
     token: string,
     select: Prisma.JwtRefreshTokenSelect = { id: true },
@@ -97,17 +121,12 @@ export class PrismaService
   }
 
   async findUserPasswordResetToken(
-    username: string,
+    uuid: string,
     select: Prisma.PasswordResetTokenSelect = { id: true, uuid: true },
   ) {
-    return this.user.findUnique({
-      where: { username },
-      select: {
-        passwordResetTokens: {
-          where: { expiresAt: { gt: new Date() } },
-          select,
-        },
-      },
+    return this.passwordResetToken.findUnique({
+      where: { uuid },
+      select,
     });
   }
 
@@ -123,10 +142,17 @@ export class PrismaService
       birthDate,
     }: UserCreate,
     { expiresAt }: EmailVerificationTokenSignup,
+    select: Prisma.UserSelect = { id: true },
   ) {
-    await this.user.create({
+    return this.user.create({
       data: {
-        email,
+        emails: {
+          create: {
+            email,
+            isActive: true,
+            emailVerificationTokens: { create: { expiresAt } },
+          },
+        },
         username,
         password,
         firstName,
@@ -137,43 +163,48 @@ export class PrismaService
         roles: { create: { role: Role.USER } },
         usernameHistory: { create: { username } },
         passwordHistory: { create: { password } },
-        emailVerificationTokens: { create: { email, expiresAt } },
       },
+      select,
     });
   }
 
   async createEmailVerificationToken(
     username: string,
-    { email, expiresAt }: EmailVerificationTokenCreate,
+    email: string,
+    { expiresAt }: EmailVerificationTokenCreate,
+    select: Prisma.EmailVerificationTokenSelect = { id: true },
   ) {
-    // Revoke all email verification tokens
-    await this.revokeEmailVerificationToken(username, email);
-
-    // Create new email verification token
     return this.emailVerificationToken.create({
-      data: { email, expiresAt, user: { connect: { username } } },
+      data: {
+        userEmail: { connect: { user: { username }, email, isActive: true } },
+        expiresAt,
+      },
+      select,
     });
   }
 
   async createPasswordResetToken(
     username: string,
     { email, expiresAt }: PasswordResetTokenCreate,
+    select: Prisma.PasswordResetTokenSelect = { id: true },
   ) {
-    // Revoke all password reset tokens
-    await this.revokePasswordResetToken(username);
-
-    // Create new password reset token
     return this.passwordResetToken.create({
-      data: { email, expiresAt, user: { connect: { username } } },
+      data: {
+        expiresAt,
+        userEmail: { connect: { user: { username }, email } },
+      },
+      select,
     });
   }
 
   async createUserLoginAttempt(
     username: string,
     { ip, successful, userAgent }: UserLoginAttemptCreate,
+    select: Prisma.UserLoginAttemptSelect = { id: true },
   ) {
     return this.userLoginAttempt.create({
       data: { ip, successful, userAgent, user: { connect: { username } } },
+      select,
     });
   }
 
@@ -188,8 +219,9 @@ export class PrismaService
       token: accessToken,
       expiresAt: accessTokenExpiresAt,
     }: JwtAccessTokenCreate,
+    select: Prisma.JwtRefreshTokenSelect = { id: true },
   ) {
-    await this.user.update({
+    return this.user.update({
       where: { username },
       data: {
         jwtRefreshTokens: {
@@ -203,6 +235,7 @@ export class PrismaService
           },
         },
       },
+      select,
     });
   }
 
@@ -217,8 +250,9 @@ export class PrismaService
       token: accessToken,
       expiresAt: accessTokenExpiresAt,
     }: JwtAccessTokenCreate,
+    select: Prisma.JwtRefreshTokenSelect = { id: true },
   ) {
-    await this.user.update({
+    return this.user.update({
       where: { username },
       data: {
         jwtRefreshTokens: {
@@ -232,6 +266,7 @@ export class PrismaService
           },
         },
       },
+      select,
     });
   }
 
@@ -244,27 +279,62 @@ export class PrismaService
 
   async updatePassword(username: string, password: string) {
     // Revoke all refresh tokens and its access tokens
-    await this.revokeJwtRefreshTokens(username);
+    const revokeJwtRefreshTokens = this.revokeJwtRefreshTokens(username);
+
+    // Revoke all password reset tokens
+    const revokePasswordResetTokens = this.revokePasswordResetTokens(username);
 
     // Update user password and add it to history
-    await this.user.update({
+    const userUpdate = this.user.update({
       where: { username },
-      data: { password, passwordHistory: { create: { password } } },
+      data: {
+        password,
+        passwordHistory: { create: { password } },
+      },
     });
+
+    await awaitConcurrently(
+      revokeJwtRefreshTokens,
+      revokePasswordResetTokens,
+      userUpdate,
+    );
   }
 
   async updateUsername(username: string, newUsername: string) {
     // Revoke all refresh tokens and its access tokens
-    await this.revokeJwtRefreshTokens(username);
+    const revokeJwtRefreshTokens = this.revokeJwtRefreshTokens(username);
 
-    // Update username and add it to history
-    await this.user.update({
+    // Update username and add it to history. Also, revoke all email verification tokens and password reset tokens
+    const updateUsername = this.user.update({
       where: { username },
       data: {
         username: newUsername,
         usernameHistory: { create: { username: newUsername } },
       },
     });
+
+    await awaitConcurrently(revokeJwtRefreshTokens, updateUsername);
+  }
+
+  async updateEmail(username: string, email: string, newEmail: string) {
+    // Set email as inactive
+    const setEmailAsInactive = this.setEmailAsInactive(username, email);
+
+    // Update email and add it to history
+    const updateUser = this.user.update({
+      where: { username },
+      data: {
+        emails: {
+          create: {
+            email: newEmail,
+            isActive: true,
+            emailVerificationTokens: { create: {} },
+          },
+        },
+      },
+    });
+
+    await awaitConcurrently(setEmailAsInactive, updateUser);
   }
 
   async updateUserRoles(
@@ -273,17 +343,33 @@ export class PrismaService
     userRoleAction: UserRoleAction,
     roles: Role[],
   ) {
+    // Update roles to user
+    let updateUser: Promise<any>;
+
     // Add roles to user
-    const updateUser = this.user.update({
-      where: { username: targetUsername },
-      data: {
-        roles: {
-          createMany: {
-            data: roles.map((role) => ({ role })),
+    if (userRoleAction === UserRoleAction.ADD)
+      updateUser = this.user.update({
+        where: { username: targetUsername },
+        data: {
+          roles: {
+            createMany: {
+              data: roles.map((role) => ({ role })),
+            },
           },
         },
-      },
-    });
+      });
+    // Remove roles from user
+    else if (userRoleAction === UserRoleAction.REMOVE)
+      updateUser = this.user.update({
+        where: { username: targetUsername },
+        data: {
+          roles: {
+            deleteMany: {
+              role: { in: roles },
+            },
+          },
+        },
+      });
 
     // Add roles to history
     const updateRoleHistory = this.user.update({
@@ -311,22 +397,64 @@ export class PrismaService
     });
   }
 
-  async setJwtRefreshTokenAsUsed(token: string) {
-    const currentDateTime = new Date();
-
-    await this.jwtRefreshToken.update({
-      where: { token },
+  async setEmailAsInactive(username: string, email: string) {
+    await this.userEmail.updateMany({
+      where: { user: { username }, email },
       data: {
-        usedAt: currentDateTime,
-        revokedAt: currentDateTime,
+        isActive: false,
       },
     });
   }
 
+  async setJwtRefreshTokenAsUsed(token: string) {
+    const currentDateTime = new Date();
+
+    await this.jwtRefreshToken.update({
+      where: { token, usedAt: null },
+      data: {
+        usedAt: currentDateTime,
+      },
+    });
+  }
+
+  async setEmailVerificationTokenAsVerified(token: string) {
+    // Update user email as verified
+    const emailVerificationToken = await this.emailVerificationToken.update({
+      where: { uuid: token },
+      data: { verifiedAt: new Date() },
+      select: {
+        userEmail: { select: { user: { select: { username: true } } } },
+      },
+    });
+
+    const { username } = emailVerificationToken.userEmail.user;
+
+    // Revoke all email verification tokens
+    await this.revokeEmailVerificationTokens(username);
+  }
+
+  async setPasswordResetTokenAsUsed(token: string) {
+    // Update password reset token as used
+    const passwordResetToken = await this.passwordResetToken.update({
+      where: { uuid: token },
+      data: { usedAt: new Date() },
+      select: {
+        userEmail: { select: { user: { select: { username: true } } } },
+      },
+    });
+
+    const { username } = passwordResetToken.userEmail.user;
+
+    // Revoke all password reset tokens
+    await this.revokePasswordResetTokens(username);
+  }
+
   async revokeJwtAccessToken(token: string) {
+    const revokedAt = new Date();
+
     await this.jwtAccessToken.update({
-      where: { token },
-      data: { revokedAt: new Date() },
+      where: { token, revokedAt: null, expiresAt: { gt: revokedAt } },
+      data: { revokedAt: revokedAt },
     });
   }
 
@@ -335,7 +463,11 @@ export class PrismaService
 
     // Revoke refresh token
     const revokeRefreshToken = this.jwtRefreshToken.update({
-      where: { token: refreshToken, revokedAt: null },
+      where: {
+        token: refreshToken,
+        revokedAt: null,
+        expiresAt: { gt: revokedAt },
+      },
       data: {
         revokedAt,
       },
@@ -360,6 +492,7 @@ export class PrismaService
       where: {
         user: { username },
         revokedAt: null,
+        expiresAt: { gt: revokedAt },
       },
       data: {
         revokedAt,
@@ -380,44 +513,62 @@ export class PrismaService
     await awaitConcurrently(revokeRefreshTokens, revokeAccessTokens);
   }
 
-  async revokeEmailVerificationToken(username: string, email: string) {
+  async revokeEmailVerificationTokens(username: string) {
     const revokedAt = new Date();
 
-    await this.user.update({
-      where: { username },
+    await this.emailVerificationToken.updateMany({
+      where: {
+        verifiedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: revokedAt },
+        userEmail: { user: { username } },
+      },
       data: {
-        emailVerificationTokens: {
-          updateMany: {
-            where: { email, expiresAt: { gt: revokedAt } },
-            data: { revokedAt: new Date() },
-          },
-        },
+        revokedAt,
       },
     });
   }
 
-  async revokePasswordResetToken(username: string) {
-    await this.user.update({
-      where: { username },
+  async revokePasswordResetTokens(username: string) {
+    const revokedAt = new Date();
+
+    await this.passwordResetToken.updateMany({
+      where: {
+        usedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: revokedAt },
+        userEmail: { user: { username } },
+      },
       data: {
-        passwordResetTokens: {
-          updateMany: {
-            where: { expiresAt: { gt: new Date() } },
-            data: { revokedAt: new Date() },
-          },
-        },
+        revokedAt,
       },
     });
   }
 
   async deleteUser(username: string) {
     // Revoke all refresh tokens and its access token
-    await this.revokeJwtRefreshTokens(username);
+    const revokeJwtRefreshTokens = this.revokeJwtRefreshTokens(username);
+
+    // Revoke all email verification tokens
+    const revokeEmailVerificationTokens =
+      this.revokeEmailVerificationTokens(username);
+
+    // Revoke all password reset tokens
+    const revokePasswordResetTokens = this.revokePasswordResetTokens(username);
 
     // Delete user
-    await this.user.update({
+    const deleteUser = this.user.update({
       where: { username },
-      data: { deleted: true },
+      data: {
+        deleted: true,
+      },
     });
+
+    await awaitConcurrently(
+      revokeJwtRefreshTokens,
+      revokeEmailVerificationTokens,
+      revokePasswordResetTokens,
+      deleteUser,
+    );
   }
 }
