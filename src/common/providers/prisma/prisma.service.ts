@@ -10,7 +10,6 @@ import {
   Role,
   UserLoginAttempt,
   UserRole,
-  UserRoleAction,
 } from '@prisma/client';
 import { awaitConcurrently } from '../../utils/execute-concurrently';
 import { UserCreate, UserUpdate } from './types/user';
@@ -106,8 +105,9 @@ export class PrismaService
   }
 
   async findUserRoles(username: string): Promise<UserRole[]> {
-    const { roles } = await this.findUser(username, { roles: true });
-    return roles;
+    return this.userRole.findMany({
+      where: { user: { username }, revokedAt: null },
+    });
   }
 
   async findUserEmailVerificationToken(
@@ -160,7 +160,6 @@ export class PrismaService
         address: address ?? Prisma.skip,
         phone: phone ?? Prisma.skip,
         birthDate: birthDate ?? Prisma.skip,
-        roles: { create: { role: Role.USER } },
         usernameHistory: { create: { username } },
         passwordHistory: { create: { password } },
       },
@@ -340,52 +339,42 @@ export class PrismaService
   async updateUserRoles(
     triggeredByUsername: string,
     targetUsername: string,
-    userRoleAction: UserRoleAction,
     roles: Role[],
+    addRoles: boolean,
   ) {
-    // Update roles to user
-    let updateUser: Promise<any>;
+    // Get triggered by user Id
+    const { id: triggeredById } = await this.findUser(triggeredByUsername, {
+      id: true,
+    });
 
     // Add roles to user
-    if (userRoleAction === UserRoleAction.ADD)
-      updateUser = this.user.update({
+    if (addRoles)
+      await this.user.update({
         where: { username: targetUsername },
         data: {
           roles: {
             createMany: {
-              data: roles.map((role) => ({ role })),
+              data: roles.map((role) => ({
+                role,
+                assignedById: triggeredById,
+              })),
             },
           },
         },
       });
     // Remove roles from user
-    else if (userRoleAction === UserRoleAction.REMOVE)
-      updateUser = this.user.update({
+    else
+      await this.user.update({
         where: { username: targetUsername },
         data: {
           roles: {
-            deleteMany: {
-              role: { in: roles },
+            updateMany: {
+              where: { role: { in: roles } },
+              data: { revokedById: triggeredById, revokedAt: new Date() },
             },
           },
         },
       });
-
-    // Add roles to history
-    const updateRoleHistory = this.user.update({
-      where: { username: triggeredByUsername },
-      data: {
-        triggeredByHistory: {
-          create: roles.map((role) => ({
-            action: userRoleAction,
-            target: { connect: { username: targetUsername } },
-            role,
-          })),
-        },
-      },
-    });
-
-    await awaitConcurrently(updateUser, updateRoleHistory);
   }
 
   async updateJwtAccessTokenLastUsage(token: string) {

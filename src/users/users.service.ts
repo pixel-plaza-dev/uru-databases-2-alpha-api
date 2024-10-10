@@ -11,13 +11,11 @@ import { Request } from 'express';
 import { AuthService } from '../common/guards/auth/auth.service';
 import { LoggerService } from '../common/providers/logger/logger.service';
 import { UserChangeUsernameDto } from '../common/dto/user/user-change-username.dto';
-import { UserRoleAction } from '@prisma/client';
 import { UserResetPasswordDto } from '../common/dto/user/user-reset-password.dto';
 import { REFRESH_TOKEN } from '../config/jwt-token';
 import { USER } from '../common/constants/user';
 import { TOKEN } from '../common/constants/token';
 import { PRISMA } from '../common/constants/prisma';
-import { USER_ROLE } from '../common/constants/user-role';
 import { EMAIL_VERIFICATION_TOKEN } from '../common/constants/email-verification-token';
 import { awaitConcurrently } from '../common/utils/execute-concurrently';
 import { UserSendEmailVerificationTokenDto } from '../common/dto/user/user-send-email-verification-token.dto';
@@ -373,7 +371,7 @@ export class UsersService {
 
   async updateRoles(
     req: Request,
-    userRoleAction: UserRoleAction,
+    addRoles: boolean,
     { username: targetUsername, roles: targetRoles }: UserUpdateRolesDto,
   ) {
     const { username: triggeredByUsername } =
@@ -388,33 +386,31 @@ export class UsersService {
     // Filter out roles that are already assigned
     let filteredRoles = [];
 
-    if (userRoleAction === UserRoleAction.ADD)
+    if (addRoles)
       filteredRoles = targetRoles.filter((role) => !roles.includes(role));
-    else if (userRoleAction === UserRoleAction.REMOVE)
-      filteredRoles = targetRoles.filter((role) => roles.includes(role));
-    else this.logger.onInternalServerError(USER_ROLE.UNREGISTERED_ACTION);
+    else filteredRoles = targetRoles.filter((role) => roles.includes(role));
 
     // Update user roles
     await this.prismaService.updateUserRoles(
       triggeredByUsername,
       targetUsername,
-      userRoleAction,
       filteredRoles,
+      addRoles,
     );
 
     return this.logger.onUserRolesUpdateSuccess(
       triggeredByUsername,
       targetUsername,
-      userRoleAction,
       filteredRoles,
+      addRoles,
     );
   }
 
   async addRoles(req: Request, { username, roles }: UserUpdateRolesDto) {
-    return this.updateRoles(req, UserRoleAction.ADD, { username, roles });
+    return this.updateRoles(req, true, { username, roles });
   }
 
   async removeRoles(req: Request, { username, roles }: UserUpdateRolesDto) {
-    return this.updateRoles(req, UserRoleAction.REMOVE, { username, roles });
+    return this.updateRoles(req, false, { username, roles });
   }
 }

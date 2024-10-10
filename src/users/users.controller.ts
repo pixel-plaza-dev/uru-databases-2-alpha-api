@@ -102,13 +102,13 @@ export class UsersController {
     return this.usersService.delete(req, user);
   }
 
-  @Roles(Role.ADMIN)
+  @Roles(Role.MALL_MANAGER, Role.MALL_OWNER)
   @Post('add-roles')
-  async setAdmin(@Req() req: Request, @Body() user: UserUpdateRolesDto) {
+  async addRoles(@Req() req: Request, @Body() user: UserUpdateRolesDto) {
     return this.usersService.addRoles(req, user);
   }
 
-  @Roles(Role.SUPER_ADMIN)
+  @Roles(Role.MALL_MANAGER, Role.MALL_OWNER)
   @Post('remove-roles')
   async removeRoles(@Req() req: Request, @Body() user: UserUpdateRolesDto) {
     return this.usersService.removeRoles(req, user);

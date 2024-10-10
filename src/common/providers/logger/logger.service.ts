@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { PONG } from '../../constants/messages';
 import { INTERNAL_SERVER_ERROR } from '../../constants/errors';
-import { Role, UserRoleAction } from '@prisma/client';
+import { Role } from '@prisma/client';
 import { AUTH } from '../../constants/auth';
 import { USER_ROLE } from '../../constants/user-role';
 
@@ -71,13 +71,10 @@ export class LoggerService extends Logger {
   onUserRolesUpdateSuccess(
     triggeredByUsername: string,
     targetUsername: string,
-    userRoleAction: UserRoleAction,
     roles: Role[],
+    addRoles: boolean,
   ) {
-    const message =
-      userRoleAction === UserRoleAction.ADD
-        ? USER_ROLE.ADDED
-        : USER_ROLE.REMOVED;
+    const message = addRoles ? USER_ROLE.ADDED : USER_ROLE.REMOVED;
 
     super.log(
       `${message}: ${triggeredByUsername} -> ${targetUsername} (${roles.join(', ')})`,
