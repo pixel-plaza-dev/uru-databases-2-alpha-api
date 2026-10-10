@@ -32,4 +32,4 @@ npm run test:cov     # coverage
 
 ## License
 
-`LICENSE` is the GNU General Public License v3.0, while `package.json` declares `UNLICENSED`.
+`LICENSE` is the GNU General Public License v3.0. `package.json` declares `GPL-3.0-only`.
